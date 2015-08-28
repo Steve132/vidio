@@ -12,14 +12,14 @@ static std::string get_ffmpeg_prefix(const std::string& usr_override="")
 		possible_locations.push_back(usr_override);
 	}
 	
-	const std::vector<std::string&> pform=platform::get_default_ffmpeg_prefix();
+	const std::vector<std::string>& pform=vidio::platform::get_default_ffmpeg_search_locations();
 	copy(pform.cbegin(),pform.cend(),std::back_inserter(possible_locations));
 	
 	for(auto pl:possible_locations)
 	{
 		try
 		{
-			platform::create_process_reader_streambuf(pl);
+			vidio::platform::create_process_reader_streambuf(pl);
 			return pl;
 		}
 		catch(const std::exception& e)
@@ -30,13 +30,14 @@ static std::string get_ffmpeg_prefix(const std::string& usr_override="")
 
 inline static constexpr bool compute_bigendian()
 {
-	union
+	union a
 	{
 		uint16_t s;
 		const uint8_t ub[2];
-	};
-	s=0x0001;
-	return ub[0]!=0x01;
+		a():s(0x0001)
+		{}
+	} ai;
+	return ai.ub[0]!=0x01;
 }
 inline static bool is_bigendian()
 {
@@ -72,6 +73,13 @@ static std::string get_fmt_code(const std::uint32_t& typesize,const uint32_t num
 	}
 	return typesel;
 }
+
+
+namespace vidio
+{
+
+namespace priv
+{
 class StreamImpl
 {
 protected:
@@ -82,21 +90,18 @@ protected:
 	
 };
 
-class vidio::Writer::Impl: public StreamImpl
+class WriterImpl: public StreamImpl
 {
 public:
 	
 };
 
-class vidio::Reader::Impl: public StreamImpl
+class ReaderImpl: public StreamImpl
 {
 public:
 
 };
-
-
-namespace vidio
-{
+}
 	
 void Writer::write(const void* buf,size_t num_frames)
 {
