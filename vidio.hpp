@@ -15,20 +15,21 @@ public:
 
 namespace
 {
+template<typename Child>
 class Stream
 {
+protected:
+	std::unique_ptr<typename Child::Impl> impl;
+	std::streambuf* sbuf;
 public:
 	const Size size;
 	const uint32_t channels;
 	const uint32_t typewidth;
 	const bool is_open;
-	
+
 	const size_t frame_size_bytes;
 	
-	Stream(const Size tsize,const uint32_t tchannels,const uint32_t ttypewidth,const bool tis_open):
-		size(tsize),channels(tchannels),typewidth(ttypewidth),is_open(tisopen),
-		frame_size_bytes(tsize.width*tsize.height*tchannels*ttypewidth)
-	{}
+	Stream(typename Child::Impl* iptr);
 	
 	virtual ~Stream()
 	{}
@@ -36,28 +37,35 @@ public:
 
 }
 
-class Reader: public Stream
+class Reader: public Stream<Reader>
 {
-private:
+protected:
 	class Impl;
-	std::unique_ptr<Impl> impl;
+	std::istream framesinstream; 
 public:
 	const uint32_t num_frames;
 	
-	Reader(const std::string& filename,const std::string& extra_decode_ffmpeg_params="");
+	Reader(	const std::string& filename,
+		const std::string& extra_decode_ffmpeg_params=""
+		const std::string& search_path_override="");
 	
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	bool read(void* buf,size_t num_frames=1);
 };
 
-class Writer: public Stream
+class Writer: public Stream<Writer>
 {
-private:
+protected:
 	class Impl;
-	std::unique_ptr<Impl> impl;
+	std::ostream framesoutstream;
 public:
 	
-	Writer(const std::string& filename,const std::string& extra_encode_ffmpeg_params="");
+	Writer(const std::string& filename,
+		Size toutsize,
+		const uint32_t tchannels=3,
+		const uint32_t ttypewidth=1,
+		const std::string& extra_encode_ffmpeg_params=""
+		const std::string& search_path_override="");
 	
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	void write(const void* buf,size_t num_frames=1);
