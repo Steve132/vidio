@@ -1,9 +1,12 @@
+#include<stdio.h>
+#include<errno.h>
+#include<unistd.h>
+#include<string.h>
+
 #include<iostream>
 #include<streambuf>
-#include<unistd.h>
-
-#include<cstdio>
-#include<cerrno>
+#include<vector>
+#include<string>
 
 #include<stdexcept>
 #include<system_error>
@@ -29,7 +32,7 @@ public:
 		pipefile=popen(cmd.c_str(),typestring[(int)rwflag]);
 		if(!pipefile)
 		{
-			throw std::system_error(errno,strerror(errno));
+			throw std::system_error(errno,std::system_category());
 		}
 	}
 	virtual ~process_streambuf_base()
@@ -52,7 +55,7 @@ public:
 	{
 		return fgetc(pipefile);
 	}
-	virtual std::streamsize xsgetn(char* bufout, streamsize n)
+	virtual std::streamsize xsgetn(char* bufout, std::streamsize n)
 	{
 		return fread(bufout,n,1,pipefile);
 	}
@@ -66,9 +69,9 @@ public:
 	{}
 	virtual int overflow(int c=EOF)
 	{
-		return fputc(pipefile);
+		return fputc(c,pipefile);
 	}
-	virtual std::streamsize xsputn(const char* bufin, streamsize n)
+	virtual std::streamsize xsputn(const char* bufin, std::streamsize n)
 	{
 		return fwrite(bufin,n,1,pipefile);
 	}
