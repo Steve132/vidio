@@ -28,7 +28,7 @@ static std::string get_ffmpeg_prefix(const std::string& usr_override="")
 	throw std::runtime_error("No executable ffmpeg process found");
 }
 
-inline static constexpr bool compute_bigendian()
+inline static bool compute_bigendian()
 {
 	union a
 	{
@@ -62,7 +62,7 @@ static std::string get_fmt_code(const std::uint32_t& typesize,const uint32_t num
 	std::string typesel=types_le[typesize-1][num_channels-1];
 	if(typesize > 1)
 	{
-		if(is_bigendian)
+		if(is_bigendian())
 		{
 			typesel+="be";
 		}
@@ -83,11 +83,15 @@ namespace priv
 class StreamImpl
 {
 protected:
-	const std::string& ffmpeg_path;
-	const std::string& ffmpeg_extra_params;
+	std::string ffmpeg_path;
+	std::string ffmpeg_extra_params;
+	
 	std::unique_ptr<std::streambuf> pstreambuf;
 	
-	
+	Size size;
+	uint32_t channels;
+	uint32_t typewidth;
+	bool is_open;
 };
 
 class WriterImpl: public StreamImpl
@@ -101,17 +105,24 @@ class ReaderImpl: public StreamImpl
 public:
 
 };
+
+
+
+
+
+
+
+
+
+
+Stream::~Stream()
+{}
+
+
 }
 	
-void Writer::write(const void* buf,size_t num_frames)
-{
-	framesoutstream.write(buf,num_frames*frame_size_bytes);
-}
 
-void Reader::read(void* buf,size_t num_frames)
-{
-	framesinstream.read(buf,num_frames);
-}
+
 
 }
 

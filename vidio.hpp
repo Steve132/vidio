@@ -16,11 +16,11 @@ public:
 namespace priv
 {
 	
-template<typename Impl>
+class StreamImpl;
 class Stream
 {
 protected:
-	std::unique_ptr<Impl> impl;
+	std::unique_ptr<StreamImpl> impl;
 	std::streambuf* sbuf;
 public:
 	const Size size;
@@ -30,7 +30,8 @@ public:
 
 	const size_t frame_size_bytes;
 	
-	Stream(Impl* iptr);
+	Stream(StreamImpl* iptr);
+	virtual ~Stream();
 };
 
 class ReaderImpl;
@@ -38,7 +39,7 @@ class WriterImpl;
 }
 
 
-class Reader: public priv::Stream<priv::ReaderImpl>
+class Reader: public priv::Stream
 {
 protected:
 	std::istream framesinstream; 
@@ -49,11 +50,14 @@ public:
 		const std::string& extra_decode_ffmpeg_params="",
 		const std::string& search_path_override="");
 	
-	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
-	bool read(void* buf,size_t num_frames=1);
+	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
+	bool read(void* buf,size_t num_frames=1)
+	{
+		return (bool)framesinstream.read((char*)buf,num_frames*frame_size_bytes);
+	}
 };
 
-class Writer: public priv::Stream<priv::WriterImpl>
+class Writer: public priv::Stream
 {
 protected:
 	std::ostream framesoutstream;
@@ -67,7 +71,10 @@ public:
 		const std::string& search_path_override="");
 	
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
-	void write(const void* buf,size_t num_frames=1);
+	void write(const void* buf,size_t num_frames)
+	{
+		framesoutstream.write((const char*)buf,num_frames*frame_size_bytes);
+	}
 };
 
 }

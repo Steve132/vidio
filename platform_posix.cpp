@@ -51,6 +51,7 @@ public:
 	process_readstreambuf(const std::string& cmd):
 		process_streambuf_base(cmd,READ_ONLY)
 	{}
+protected:
 	virtual int underflow()
 	{
 		return fgetc(pipefile);
@@ -67,6 +68,7 @@ public:
 	process_writestreambuf(const std::string& cmd):
 		process_streambuf_base(cmd,WRITE_ONLY)
 	{}
+protected:
 	virtual int overflow(int c=EOF)
 	{
 		return fputc(c,pipefile);
