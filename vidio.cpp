@@ -82,9 +82,8 @@ namespace priv
 {
 class StreamImpl
 {
-protected:
+public:
 	std::string ffmpeg_path;
-	std::string ffmpeg_extra_params;
 	
 	std::unique_ptr<std::streambuf> pstreambuf;
 	
@@ -92,40 +91,94 @@ protected:
 	uint32_t channels;
 	uint32_t typewidth;
 	bool is_open;
-};
-
-class WriterImpl: public StreamImpl
-{
-public:
 	
+	virtual ~StreamImpl()
+	{}
 };
 
 class ReaderImpl: public StreamImpl
 {
 public:
-
+	uint32_t num_frames;
+	ReaderImpl(
+		const std::string& filename,
+		const Size& toutsize,
+		const uint32_t tchannels,
+		const uint32_t ttypewidth,
+		const std::string& extra_decode_ffmpeg_params,
+		const std::string& search_path_override)
+	{
+		//If toutsize is not specified (0), do populate size datatype with probed info.
+		//otherwise, if its' specified, add a scaling filter tothe filterchain on output.
+		//same with channels and typewidth
+	}
 };
 
+class WriterImpl: public StreamImpl
+{
+public:
+	WriterImpl(
+		const std::string& filename,
+		const Size& toutsize,
+		const uint32_t tchannels,
+		const uint32_t ttypewidth,
+		const std::string& extra_encode_ffmpeg_params,
+		const std::string& search_path_override)
+	{
+		
+	}
+};
+
+}
 
 
 
-
-
-
-
+Stream::Stream(priv::StreamImpl* iptr):
+	impl(iptr),
+	sbuf(iptr->pstreambuf.get()),
+	size(iptr->size),
+	channels(iptr->channels),
+	typewidth(iptr->typewidth),
+	is_open(iptr->is_open),
+	frame_size_bytes(size.width*size.height*channels*typewidth)
+{}
 
 
 Stream::~Stream()
 {}
 
 
+Reader::Reader(	const std::string& filename,
+		const Size& toutsize,
+		const uint32_t tchannels,
+		const uint32_t ttypewidth,
+		const std::string& extra_decode_ffmpeg_params,
+		const std::string& search_path_override):
+		
+		Stream(	new priv::ReaderImpl(
+			filename,
+			toutsize,
+			tchannels,
+			ttypewidth,
+			extra_decode_ffmpeg_params,
+			search_path_override)
+		),
+		framesinstream(impl->pstreambuf.get()),
+		num_frames(dynamic_cast<const priv::ReaderImpl*>(impl.get())->num_frames)
+{}
+
+Writer::Writer(const std::string& filename,
+		const Size& toutsize,
+		const uint32_t tchannels,
+		const uint32_t ttypewidth,
+		const std::string& extra_encode_ffmpeg_params,
+		const std::string& search_path_override):
+		
+		Stream(new priv::WriterImpl(filename,toutsize,tchannels,ttypewidth,extra_encode_ffmpeg_params,search_path_override)),
+		framesoutstream(impl->pstreambuf.get())
+{}
+
 }
-	
-
-
-
-}
-
 
 
 	

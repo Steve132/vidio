@@ -7,20 +7,26 @@
 
 namespace vidio
 {
+namespace priv
+{
+class StreamImpl;
+class ReaderImpl;
+class WriterImpl;
+}
+
 struct Size
 {
 public:
 	uint32_t width,height;
+	Size(uint32_t w=0,uint32_t h=0):
+		width(w),height(h)
+	{}
 };
 
-namespace priv
-{
-	
-class StreamImpl;
 class Stream
 {
 protected:
-	std::unique_ptr<StreamImpl> impl;
+	std::unique_ptr<priv::StreamImpl> impl;
 	std::streambuf* sbuf;
 public:
 	const Size size;
@@ -30,23 +36,21 @@ public:
 
 	const size_t frame_size_bytes;
 	
-	Stream(StreamImpl* iptr);
+	Stream(priv::StreamImpl* iptr);
 	virtual ~Stream();
 };
 
-class ReaderImpl;
-class WriterImpl;
-}
-
-
-class Reader: public priv::Stream
+class Reader: public Stream
 {
 protected:
 	std::istream framesinstream; 
 public:
-	const uint32_t num_frames;
+	const uint32_t num_frames; //How do we do this?
 	
 	Reader(	const std::string& filename,
+		const Size& toutsize=Size(),
+		const uint32_t tchannels=0,
+		const uint32_t ttypewidth=0,
 		const std::string& extra_decode_ffmpeg_params="",
 		const std::string& search_path_override="");
 	
@@ -55,16 +59,20 @@ public:
 	{
 		return (bool)framesinstream.read((char*)buf,num_frames*frame_size_bytes);
 	}
+	operator bool() const
+	{
+		return is_open && (bool)framesinstream;
+	}
 };
 
-class Writer: public priv::Stream
+class Writer: public Stream
 {
 protected:
 	std::ostream framesoutstream;
 public:
 	
 	Writer(const std::string& filename,
-		Size toutsize,
+		const Size& toutsize,
 		const uint32_t tchannels=3,
 		const uint32_t ttypewidth=1,
 		const std::string& extra_encode_ffmpeg_params="",
@@ -74,6 +82,10 @@ public:
 	void write(const void* buf,size_t num_frames)
 	{
 		framesoutstream.write((const char*)buf,num_frames*frame_size_bytes);
+	}
+	operator bool() const
+	{
+		return is_open && (bool)framesoutstream;
 	}
 };
 
