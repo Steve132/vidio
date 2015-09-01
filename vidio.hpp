@@ -32,6 +32,7 @@ public:
 	const Size size;
 	const uint32_t channels;
 	const uint32_t typewidth;
+	const double framerate;
 	const bool is_open;
 
 	const size_t frame_size_bytes;
@@ -48,9 +49,10 @@ public:
 	const uint32_t num_frames; //How do we do this?
 	
 	Reader(	const std::string& filename,
-		const Size& toutsize=Size(),
+		const Size& tsize=Size(),
 		const uint32_t tchannels=0,
 		const uint32_t ttypewidth=0,
+		const double tframerate=-1.0,
 		const std::string& extra_decode_ffmpeg_params="",
 		const std::string& search_path_override="");
 	
@@ -72,9 +74,10 @@ protected:
 public:
 	
 	Writer(const std::string& filename,
-		const Size& toutsize,
+		const Size& tsize,
 		const uint32_t tchannels=3,
 		const uint32_t ttypewidth=1,
+		const double tframerate=29.97,
 		const std::string& extra_encode_ffmpeg_params="",
 		const std::string& search_path_override="");
 	
