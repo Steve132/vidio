@@ -21,13 +21,13 @@ public:
 	Size(uint32_t w=0,uint32_t h=0):
 		width(w),height(h)
 	{}
+	static const Size Unknown;
 };
 
 class Stream
 {
 protected:
 	std::unique_ptr<priv::StreamImpl> impl;
-	std::streambuf* sbuf;
 public:
 	const Size size;
 	const uint32_t channels;
@@ -35,7 +35,7 @@ public:
 	const double framerate;
 	const bool is_open;
 
-	const size_t frame_size_bytes;
+	const size_t frame_buffer_size;
 	
 	Stream(priv::StreamImpl* iptr);
 	virtual ~Stream();
@@ -44,7 +44,7 @@ public:
 class Reader: public Stream
 {
 protected:
-	std::istream framesinstream; 
+	std::shared_ptr<std::istream> framesinstream; 
 public:
 	const uint32_t num_frames; //How do we do this?
 	
@@ -59,18 +59,18 @@ public:
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
 	bool read(void* buf,size_t num_frames=1)
 	{
-		return (bool)framesinstream.read((char*)buf,num_frames*frame_size_bytes);
+		return (bool)framesinstream->read((char*)buf,num_frames*frame_buffer_size);
 	}
 	operator bool() const
 	{
-		return is_open && (bool)framesinstream;
+		return is_open && (bool)(*framesinstream);
 	}
 };
 
 class Writer: public Stream
 {
 protected:
-	std::ostream framesoutstream;
+	std::shared_ptr<std::ostream> framesoutstream;
 public:
 	
 	Writer(const std::string& filename,
@@ -84,11 +84,11 @@ public:
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	void write(const void* buf,size_t num_frames)
 	{
-		framesoutstream.write((const char*)buf,num_frames*frame_size_bytes);
+		framesoutstream->write((const char*)buf,num_frames*frame_buffer_size);
 	}
 	operator bool() const
 	{
-		return is_open && (bool)framesoutstream;
+		return is_open && (bool)(*framesoutstream);
 	}
 };
 

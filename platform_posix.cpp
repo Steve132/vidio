@@ -11,10 +11,27 @@
 #include<stdexcept>
 #include<system_error>
 
+#include "vidio_internal.hpp"
+#include "pstream.h"
+
 namespace vidio
 {
+	
+	
+#ifndef USE_PSTREAMS
 namespace posix
 {
+
+	
+
+class fake_streambuf: public std::streambuf
+{
+public:
+	fake_streambuf(const std::string& cmd)
+	{
+		std::cerr << "Now executing:\n>" << cmd << std::endl;
+	}
+};
 
 class process_streambuf_base: public std::streambuf
 {
@@ -28,7 +45,8 @@ public:
 	};
 	process_streambuf_base(const std::string& cmd,ReadWriteType rwflag)
 	{
-		static const char* typestring[2]={"re","we"};
+		static const char* typestring[2]={"r","w"};
+		std::cerr << "Attempting to run Command:\n>" << cmd << std::endl;
 		pipefile=popen(cmd.c_str(),typestring[(int)rwflag]);
 		if(!pipefile)
 		{
@@ -37,10 +55,11 @@ public:
 	}
 	virtual ~process_streambuf_base()
 	{
+		std::cerr << "Close";
 		if(pipefile)
 		{
 			int exitcode=pclose(pipefile); //log if return code non-0? Can't throw from a destructor!
-			std::clog << "child ffmpeg process exited with non-zero return code: " << exitcode << "\n";
+			std::cerr<< "child ffmpeg process exited with non-zero return code: " << exitcode << "\n";
 		}
 	}
 };
@@ -54,7 +73,9 @@ public:
 protected:
 	virtual int underflow()
 	{
-		return fgetc(pipefile);
+		int i=fgetc(pipefile);
+		std::cerr << "Read char: " << (char)i << std::endl;
+		return i;
 	}
 	virtual std::streamsize xsgetn(char* bufout, std::streamsize n)
 	{
@@ -81,18 +102,36 @@ protected:
 
 }
 
+
+#endif
+
+
 namespace platform
 {
+	
+/*
 //public implementation of platform-specific code
 std::streambuf* create_process_reader_streambuf(const std::string& cmd)
 {
-	return new posix::process_readstreambuf(cmd);
+	//return new posix::process_readstreambuf(cmd);
+	return new pstreambuf(cmd
+	//return new posix::fake_streambuf(cmd);
 }
 
 std::streambuf* create_process_writer_streambuf(const std::string& cmd)
 {
 	return new posix::process_writestreambuf(cmd);
+}*/
+
+std::shared_ptr<std::istream> create_process_reader_stream(const std::string& cmd)
+{
+	return std::shared_ptr<std::istream>(new redi::ipstream(cmd));
 }
+std::shared_ptr<std::ostream> create_process_writer_stream(const std::string& cmd)
+{
+	return std::shared_ptr<std::ostream>(new redi::opstream(cmd));
+}
+
 
 const std::vector<std::string>& get_default_ffmpeg_search_locations()
 {
