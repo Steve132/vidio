@@ -39,7 +39,7 @@ public:
 		Size sz=size();
 		return sz.width*sz.height*(pixelformat().bits_per_pixel/8);
 	}
-	static std::vector<PixelFormat> valid_pixelformats();
+	static std::vector<PixelFormat> valid_pixelformats(const std::vector<std::string>& additional_search_locations={});
 
 	bool read_video_frame(void *buf) const;
 	bool read_audio_frame(void* buf) const;
