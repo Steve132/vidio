@@ -9,7 +9,7 @@ int main(int argc,char** argv)
 {
 	try
 	{
-		vidio::Reader reader(argv[1],vidio::Size(720,480),3,1);
+		vidio::Reader reader(argv[1]);
 	
 	
 		std::unique_ptr<uint8_t[]> framebuf(new uint8_t[reader.frame_buffer_size]);

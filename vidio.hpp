@@ -67,12 +67,15 @@ public:
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	bool write_video_frame(const void* buf) const;
 	bool write_audio_frame(const void* buf) const;
+    bool good() const;
 
 	operator bool() const
 	{
-		return is_open && (bool)(*framesoutstream);
+		return good();
 	}
 };
+
+}
 
 
 #endif
