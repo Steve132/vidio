@@ -35,7 +35,7 @@ public:
 	double framerate() const;
 	bool good() const;
 	Size size() const;
-	size_t framesize() const {
+	size_t video_framesize() const {
 		Size sz=size();
 		return sz.width*sz.height*(pixelformat().bits_per_pixel/8);
 	}

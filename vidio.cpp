@@ -20,6 +20,8 @@ public:
 		}
 		return *def;
 	}
+	
+    bool is_good;
 };
 
 
