@@ -4,94 +4,75 @@
 #include<memory>
 #include<iostream>
 #include<cstdint>
+#include<string>
+#include<vector>
 
 namespace vidio
 {
-namespace priv
-{
-class StreamImpl;
-class ReaderImpl;
-class WriterImpl;
-}
 
 struct Size
 {
-public:
-	uint32_t width,height;
-	Size(uint32_t w=0,uint32_t h=0):
-		width(w),height(h)
-	{}
-	static const Size Unknown;
+	size_t width;
+	size_t height;
 };
 
-class Stream
+struct PixelFormat
 {
-protected:
-	std::unique_ptr<priv::StreamImpl> impl;
-public:
-	const Size size;
-	const uint32_t channels;
-	const uint32_t typewidth;
-	const double framerate;
-	const bool is_open;
-
-	const size_t frame_buffer_size;
-	
-	Stream(priv::StreamImpl* iptr);
-	virtual ~Stream();
+	std::string name;
+	unsigned num_components;
+	unsigned bits_per_pixel;
 };
 
-class Reader: public Stream
+class Reader
 {
 protected:
-	std::shared_ptr<std::istream> framesinstream; 
+	class Impl;
+	std::shared_ptr<Impl> impl;
 public:
-	const uint32_t num_frames; //How do we do this?
-	
-	Reader(	const std::string& filename,
-		const Size& tsize=Size(),
-		const uint32_t tchannels=0,
-		const uint32_t ttypewidth=0,
-		const double tframerate=-1.0,
-		const std::string& extra_decode_ffmpeg_params="",
-		const std::string& search_path_override="");
-	
-	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
-	bool read(void* buf,size_t num_frames=1)
-	{
-		return (bool)framesinstream->read((char*)buf,num_frames*frame_buffer_size);
+	Reader(const std::string& filename,const std::string& pixelformat="",const std::vector<std::string>& extra_ffmpeg_locations={});
+
+	const PixelFormat& pixelformat() const;
+	double framerate() const;
+	bool good() const;
+	Size size() const;
+	size_t framesize() const {
+		Size sz=size();
+		return sz.width*sz.height*(pixelformat().bits_per_pixel/8);
 	}
+
+	bool read_video_frame(void *buf) const;
+	bool read_audio_frame(void* buf) const;
+	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
+	
 	operator bool() const
 	{
-		return is_open && (bool)(*framesinstream);
+		return good();
 	}
 };
 
-class Writer: public Stream
+class Writer
 {
 protected:
-	std::shared_ptr<std::ostream> framesoutstream;
+	class Impl;
+	std::shared_ptr<Impl> impl;
 public:
 	
 	Writer(const std::string& filename,
-		const Size& tsize,
-		const uint32_t tchannels=3,
-		const uint32_t ttypewidth=1,
-		const double tframerate=29.97,
-		const std::string& extra_encode_ffmpeg_params="",
-		const std::string& search_path_override="");
+		const Size& size,
+		double framerate,
+		const std::string& fmt="rgba",
+		const std::string& encode_ffmpeg_params="",
+		const std::vector<std::string>& extra_ffmpeg_locations={});
 	
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
-	void write(const void* buf,size_t num_frames)
-	{
-		framesoutstream->write((const char*)buf,num_frames*frame_buffer_size);
-	}
+	bool write_video_frame(const void* buf) const;
+	bool write_audio_frame(const void* buf) const;
+
 	operator bool() const
 	{
 		return is_open && (bool)(*framesoutstream);
 	}
 };
 
-}
 
 #endif
