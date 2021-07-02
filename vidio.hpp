@@ -39,6 +39,7 @@ public:
 		Size sz=size();
 		return sz.width*sz.height*(pixelformat().bits_per_pixel/8);
 	}
+	static std::vector<PixelFormat> valid_pixelformats();
 
 	bool read_video_frame(void *buf) const;
 	bool read_audio_frame(void* buf) const;
@@ -63,6 +64,8 @@ public:
 		const std::string& fmt="rgba",
 		const std::string& encode_ffmpeg_params="",
 		const std::vector<std::string>& extra_ffmpeg_locations={});
+
+	static std::vector<PixelFormat> valid_pixelformats();
 	
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	bool write_video_frame(const void* buf) const;
