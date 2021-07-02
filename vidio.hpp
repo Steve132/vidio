@@ -34,9 +34,9 @@ public:
 	const PixelFormat& pixelformat() const;
 	double framerate() const;
 	bool good() const;
-	Size size() const;
-	size_t video_framesize() const {
-		Size sz=size();
+	Size video_frame_dimensions() const;
+	size_t video_frame_bufsize() const {
+		Size sz=video_frame_dimensions();
 		return sz.width*sz.height*(pixelformat().bits_per_pixel/8);
 	}
 	static std::vector<PixelFormat> valid_pixelformats(const std::vector<std::string>& additional_search_locations={});
@@ -65,7 +65,7 @@ public:
 		const std::string& encode_ffmpeg_params="",
 		const std::vector<std::string>& extra_ffmpeg_locations={});
 
-	static std::vector<PixelFormat> valid_pixelformats();
+	static std::vector<PixelFormat> valid_pixelformats(const std::vector<std::string>& additional_search_locations);
 	
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	bool write_video_frame(const void* buf) const;
