@@ -3,37 +3,36 @@
 #include<unordered_map>
 #include<vector>
 
-class FFMPEG_Install
+namespace vidio
+{
+
+class FFMPEG_Install::Impl
 {
 public:
-	FFMPEG_Install(const std::vector<std::string>& additional_search_locations={});
+	Impl(const std::vector<std::string>& additional_search_locations={});
 	bool good() const {return m_good;}
 
 	bool m_good;
 	std::string ffmpeg_path;
-	std::vector<vidio::PixelFormat> input_pixel_formats;
-	std::vector<vidio::PixelFormat> output_pixel_formats;
 	std::unordered_map<std::string,vidio::PixelFormat> readable_formats; //"O"
 	std::unordered_map<std::string,vidio::PixelFormat> writeable_formats; //"I"
-
-	static const FFMPEG_Install& instance(const std::vector<std::string>& additional_search_locations={})
-	{
-		static std::shared_ptr<FFMPEG_Install> def;
-		if(!def || !def->good()) { def=std::make_shared<FFMPEG_Install>(additional_search_locations); }
-		if(!def || !def->good()) {
-			throw std::runtime_error("Error, can't find ffmpeg.");
-		}
-		return *def;
-	}
-	
-    bool is_good;
 };
 
+const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_read_pixelformats() const
+{
+    return impl->readable_formats;
+}
+const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_write_pixelformats() const
+{
+    return impl->writeable_formats;
+}
+
+}
 //the default loglevel should 
 
 bool parse_ffmpeg_pixfmts(
-    std::vector<vidio::PixelFormat>& input_pixel_formats, 
-    std::vector<vidio::PixelFormat>& output_pixel_formats, 
+    std::unordered_map<std::string,vidio::PixelFormat>& input_pixel_formats, 
+    std::unordered_map<std::string,vidio::PixelFormat>& output_pixel_formats, 
     const std::string& default_ffmpeg_path = "/usr/bin/ffmpeg")
 {
 	const char *const commandLine[] = {default_ffmpeg_path.c_str(), "-v","24","-pix_fmts", 0};
@@ -73,11 +72,11 @@ bool parse_ffmpeg_pixfmts(
 
 				if(temps[0] == 'I')
 				{
-					input_pixel_formats.push_back(pixfmt);
+					input_pixel_formats[pixfmt.name]=pixfmt;
 				}
 				if(temps[1] == 'O')
 				{
-					output_pixel_formats.push_back(pixfmt);
+					output_pixel_formats[pixfmt.name]=pixfmt;
 				}
 			}
 		}
@@ -96,13 +95,15 @@ bool parse_ffmpeg_pixfmts(
 	return true;
 }
 
-FFMPEG_Install::FFMPEG_Install(const std::vector<std::string>& additional_search_locations)
+vidio::FFMPEG_Install::Impl::Impl(const std::vector<std::string>& additional_search_locations)
 {
 	// call pix_fmts with default install location and if it doesn't work, test additional_search_locations
 	std::vector<std::string> platform_defaults = {"/usr/bin/ffmpeg"};
 	std::string ffmpeg_path = "";
 	platform_defaults.insert(platform_defaults.end(),additional_search_locations.begin(),additional_search_locations.end());
 	m_good = false;
+    
+    std::unordered_map<std::string,PixelFormat> input_pixel_formats,output_pixel_formats;
 	for(
         std::vector<std::string>::const_iterator search_location = additional_search_locations.begin(); 
     !m_good && search_location != additional_search_locations.end(); search_location++)
@@ -115,15 +116,13 @@ FFMPEG_Install::FFMPEG_Install(const std::vector<std::string>& additional_search
 	}
 	if(m_good)
 	{
-		for(const vidio::PixelFormat& pf:input_pixel_formats)
-		{
-			writeable_formats[pf.name] = pf;
-		}
-		for(const vidio::PixelFormat& pf:output_pixel_formats)
-		{
-			readable_formats[pf.name] = pf;
-		}
+        writeable_formats=input_pixel_formats;
+        readable_formats=output_pixel_formats;
 	}
+	else
+    {
+        throw std::runtime_error("Unable to find ffmpeg binary");
+    }
 }
 
 //eventually use HW formats. https://www.ffmpeg.org/doxygen/2.5/pixfmt_8h.html#a9a8e335cf3be472042bc9f0cf80cd4c5
@@ -134,14 +133,14 @@ namespace vidio
 class Reader::Impl
 {
 public:
-    Impl(const std::string& filename,const std::string& pixelformat,const std::vector<std::string>& extra_ffmpeg_locations)
+    Impl(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install)
     {
         filepointer=NULL;
         //TODO open filepointer here.  parse fps and pixelformat string. 
         if(pixelformat == "") { 
-            pixelformat=parsed_pixelformat;
+            //pixelformat=parsed_pixelformat;
         }
-        fmt=FFMPEG_Install(
+        //fmt=
     }
     FILE* filepointer;
     PixelFormat fmt;
@@ -166,16 +165,17 @@ public:
 
 	bool read_video_frame(void *buf) const
 	{
-        
+        return false;
     }
 	bool read_audio_frame(void* buf) const
 	{
+        return false;
     }
 };
 
 
-Reader::Reader(const std::string& filename,const std::string& pixelformat,const std::vector<std::string>& extra_ffmpeg_locations):
-    impl(std::make_shared<Reader::Impl>(filename,pixelformat,extra_ffmpeg_locations))
+Reader::Reader(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install):
+    impl(std::make_shared<Reader::Impl>(filename,pixelformat,install))
 {}
 
 const PixelFormat& Reader::pixelformat() const
@@ -203,10 +203,7 @@ bool Reader::read_audio_frame(void* buf) const
 {
     return impl->read_audio_frame(buf);
 }
-std::vector<PixelFormat> Reader::valid_pixelformats(const std::vector<std::string>& additional_search_locations)
-{
-    return FFMPEG_Install::instance(additional_search_locations).output_pixel_formats;
-}
+
 
 
 
@@ -228,9 +225,6 @@ public:
 
 };
 
-std::vector<PixelFormat> Writer::valid_pixelformats(const std::vector<std::string>& additional_search_locations)
-{
-    return FFMPEG_Install::instance(additional_search_locations).input_pixel_formats;
-}
+
 
 }
