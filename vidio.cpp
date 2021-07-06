@@ -2,32 +2,100 @@
 #include "subprocess.h"
 #include<unordered_map>
 #include<vector>
+#include<cstdio>
+#include<iostream>
 
-namespace vidio
-{
 
-class FFMPEG_Install::Impl
+class FileOstreamBuf: public std::streambuf
 {
 public:
-	Impl(const std::vector<std::string>& additional_search_locations={});
-	bool good() const {return m_good;}
-
-	bool m_good;
-	std::string ffmpeg_path;
-	std::unordered_map<std::string,vidio::PixelFormat> readable_formats; //"O"
-	std::unordered_map<std::string,vidio::PixelFormat> writeable_formats; //"I"
+    FILE* fp;
+    FileOstreamBuf(FILE* tfp):fp(tfp){}
+    virtual int overflow(int c=traits_type::eof())
+    {
+        if(c == std::streambuf::traits_type::eof() || ferror (fp) ) return std::streambuf::traits_type::eof();
+        return fputc(c,fp);
+    }
+    virtual std::streamsize xsputn(const char* s,std::streamsize n)
+    {
+        return fwrite(s,n,1,fp);
+    }
 };
 
-const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_read_pixelformats() const
+template<
+subprocess_weak unsigned
+    (*SPREAD)(struct subprocess_s *const process, 
+              char *const buffer,unsigned size)
+>
+class SubprocessIstreamBuf: public std::streambuf
 {
-    return impl->readable_formats;
-}
-const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_write_pixelformats() const
-{
-    return impl->writeable_formats;
-}
+public:
+    struct subprocess_s* process_ptr;
+    SubprocessIstreamBuf(struct subprocess_s* tpp):process_ptr(tpp)
+    {}
+    virtual int underflow()
+    {
+        char ch;
+        return SPREAD(process_ptr,&ch,1) ? ch : std::streambuf::traits_type::eof();
+    }
+    virtual std::streamsize xsgetn(char* s,std::streamsize n)
+    {
+        return SPREAD(process_ptr,s,n);
+    }
+};
 
-}
+struct Subprocess
+{
+private:
+    FILE* init(const char *const commandLine[])
+    {
+        if(subprocess_create(commandLine, subprocess_option_enable_async | subprocess_option_inherit_environment | subprocess_option_no_window, &process) != 0)
+        {
+            m_good=false;
+            return NULL;
+        }
+        return subprocess_stdin(&process);
+    }
+
+	struct subprocess_s process;
+public:
+    bool m_good;
+        
+    std::ostream instream;
+    std::istream outstream;
+    std::istream errstream;
+    
+    
+    operator bool() const{ return m_good; }
+    
+    
+    Subprocess(const char *const commandLine[]):
+        m_good(true),
+        instream(new FileOstreamBuf(init(commandLine))),
+        outstream(new SubprocessIstreamBuf<subprocess_read_stdout>(&process)),
+        errstream(new SubprocessIstreamBuf<subprocess_read_stderr>(&process))
+    {
+        
+    }
+    
+    int join()
+    {
+        int ret=-1;
+        if(m_good && subprocess_alive(&process)) subprocess_join(&process, &ret);
+        return ret;
+    }
+    ~Subprocess()
+    {
+        join();
+        if(m_good)
+        {
+            subprocess_destroy(&process);
+        }
+    }
+};
+
+
+
 //the default loglevel should 
 
 bool parse_ffmpeg_pixfmts(
@@ -36,23 +104,21 @@ bool parse_ffmpeg_pixfmts(
     const std::string& default_ffmpeg_path = "/usr/bin/ffmpeg")
 {
 	const char *const commandLine[] = {default_ffmpeg_path.c_str(), "-v","24","-pix_fmts", 0};
-	struct subprocess_s process;
-	int ret = -1;
-	FILE *stdout_file;
-	int nchars = 128;
-	char temp[nchars];
 
-	if(subprocess_create(commandLine, 0, &process) != 0)
-		return false;
-	stdout_file = subprocess_stdout(&process); // note: not stderr! pix_fmts goes to stdout
+
+    Subprocess ffproc(commandLine);
+    if(!ffproc)
+    {
+        return false;
+    }
 
 	input_pixel_formats.clear();
 	output_pixel_formats.clear();
 	bool line_is_a_format = false;
-	while(!feof(stdout_file))
+	while(ffproc.outstream)
 	{
-		fgets(temp, nchars, stdout_file);
-		std::string temps(temp);
+		std::string temps;
+        std::getline(ffproc.outstream,temps);
 		if(line_is_a_format) // IO... yuv420p                3            12
 		{
 			vidio::PixelFormat pixfmt;
@@ -82,53 +148,74 @@ bool parse_ffmpeg_pixfmts(
 		}
 		if(temps.find("FLAGS") != std::string::npos)
 		{
-			fgets(temp, nchars, stdout_file); // ignore next line.
+			std::getline(ffproc.outstream,temps); // ignore next line.
 			line_is_a_format = true;
 		}
 	}
-	subprocess_join(&process, &ret);
-	if(ret != 0)
-	{
-		return false;
-	}
-	subprocess_destroy(&process);
-	return true;
+	
+	return ffproc.join()==0;
 }
-
-vidio::FFMPEG_Install::Impl::Impl(const std::vector<std::string>& additional_search_locations)
-{
-	// call pix_fmts with default install location and if it doesn't work, test additional_search_locations
-	std::vector<std::string> platform_defaults = {"/usr/bin/ffmpeg"};
-	std::string ffmpeg_path = "";
-	platform_defaults.insert(platform_defaults.end(),additional_search_locations.begin(),additional_search_locations.end());
-	m_good = false;
-    
-    std::unordered_map<std::string,PixelFormat> input_pixel_formats,output_pixel_formats;
-	for(
-        std::vector<std::string>::const_iterator search_location = additional_search_locations.begin(); 
-    !m_good && search_location != additional_search_locations.end(); search_location++)
-	{
-		m_good = parse_ffmpeg_pixfmts(input_pixel_formats, output_pixel_formats, *search_location);
-		if(m_good)
-		{
-			ffmpeg_path = *search_location;
-		}
-	}
-	if(m_good)
-	{
-        writeable_formats=input_pixel_formats;
-        readable_formats=output_pixel_formats;
-	}
-	else
-    {
-        throw std::runtime_error("Unable to find ffmpeg binary");
-    }
-}
-
-//eventually use HW formats. https://www.ffmpeg.org/doxygen/2.5/pixfmt_8h.html#a9a8e335cf3be472042bc9f0cf80cd4c5
 
 namespace vidio
 {
+
+class FFMPEG_Install::Impl
+{
+public:
+	
+	bool good() const {return m_good;}
+
+	bool m_good;
+	std::string ffmpeg_path;
+	std::unordered_map<std::string,vidio::PixelFormat> readable_formats; //"O"
+	std::unordered_map<std::string,vidio::PixelFormat> writeable_formats; //"I"
+    Impl(const std::vector<std::string>& additional_search_locations={})
+    {
+        // call pix_fmts with default install location and if it doesn't work, test additional_search_locations
+        std::vector<std::string> platform_defaults = {"/usr/bin/ffmpeg"};
+        std::string ffmpeg_path = "";
+        platform_defaults.insert(platform_defaults.end(),additional_search_locations.begin(),additional_search_locations.end());
+        m_good = false;
+        
+        std::unordered_map<std::string,PixelFormat> input_pixel_formats,output_pixel_formats;
+        for(
+            std::vector<std::string>::const_iterator search_location = additional_search_locations.begin(); 
+        !m_good && search_location != additional_search_locations.end(); search_location++)
+        {
+            m_good = parse_ffmpeg_pixfmts(input_pixel_formats, output_pixel_formats, *search_location);
+            if(m_good)
+            {
+                ffmpeg_path = *search_location;
+            }
+        }
+        if(m_good)
+        {
+            writeable_formats=input_pixel_formats;
+            readable_formats=output_pixel_formats;
+        }
+        else
+        {
+            throw std::runtime_error("Unable to find ffmpeg binary");
+        }
+}
+
+    
+};
+
+
+const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_read_pixelformats() const
+{
+    return impl->readable_formats;
+}
+const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_write_pixelformats() const
+{
+    return impl->writeable_formats;
+}
+
+
+
+
+//eventually use HW formats. https://www.ffmpeg.org/doxygen/2.5/pixfmt_8h.html#a9a8e335cf3be472042bc9f0cf80cd4c5
 
 class Reader::Impl
 {
@@ -172,6 +259,8 @@ public:
         return false;
     }
 };
+
+
 
 
 Reader::Reader(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install):
