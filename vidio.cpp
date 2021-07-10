@@ -4,6 +4,7 @@
 #include<vector>
 #include<cstdio>
 #include<iostream>
+#include<sstream>
 using namespace std;
 
 class FileOstreamBuf: public std::streambuf
@@ -331,23 +332,53 @@ class Reader::Impl
 public:
     Impl(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install)
     {
+		if(!install.good())
+		{
+			throw std::runtime_error("FFMPEG Installation not found.");
+		}
 		std::string parsed_pixelformat = "";
 		double parsed_fps = -1;
 		vidio::Size parsed_frame_dimensions;
-		if(!parse_input_pixel_fmt(filename, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions)) // TODO: open only one ffmpeg call: integrate reading stderr for pixformat with same ffmpeg call as opening for reading once Subprocess class fixed.
+		if(!parse_input_pixel_fmt(filename, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions)) // TODO: Update for Subprocess class once fixed: open only one ffmpeg call: integrate reading stderr for pixformat with same ffmpeg call as opening for reading once Subprocess class fixed.
 		{
 			throw std::runtime_error("Could not open for reading." + filename);
 		}
 
-        filepointer=NULL;
-        //TODO open filepointer for reading here.
 		std::unordered_map<std::string,vidio::PixelFormat> valid_read_pixformats = install.valid_read_pixelformats();
-        fmt=valid_read_pixformats[parsed_pixelformat];
+		std::string raw_pixformat = "rgba";
+        fmt=valid_read_pixformats[raw_pixformat]; //parsed_pixelformat]; // TODO: Update for parsed_pixelformat or input pixelformat rather than rgba!
 		frame_dims.width = parsed_frame_dimensions.width;
 		frame_dims.height = parsed_frame_dimensions.height;
 		fps = parsed_fps;
+
+		// TODO: replace rgba with pixelformat specified by input parameter
+		const char *const commandLine[] = {
+				install.ffmpeg_path().c_str(), "-i", filename.c_str(), "-pix_fmt", "rgba", "-vcodec", "rawvideo", "-f", "image2pipe", "pipe:1", 0};
+		if(subprocess_create(commandLine, 0, &process) != 0)
+		{
+			throw std::runtime_error("Could not open for reading." + filename);
+		}
+        filepointer = subprocess_stdout(&process); // TODO: update for Subprocess class once fixed.
+		// TEST ONLY: Write stream to verify read
+		std::stringstream ss;
+		ss << "ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt " << "rgba" << " -s ";
+		ss << frame_dims.width << "x" << frame_dims.height;
+		ss << " -r " << static_cast<int>(fps) << " -i - -f mp4 -q:v 5 -an -vcodec mpeg4 out.mp4";
+		cerr << "Open for writing:" << ss.str() << endl;
+		pipeout = popen(ss.str().c_str(), "w");
     }
+	~Impl()
+	{
+		if(pipeout != NULL) // TODO: debug only, remove later.
+		{
+			fflush(pipeout);
+			pclose(pipeout);
+		}
+		subprocess_destroy(&process); // TODO: remove on Subprocess class once fixed.
+	}
+	struct subprocess_s process; // TODO: update for Subprocess class once fixed.
     FILE* filepointer;
+	FILE* pipeout; // TODO: debug only, remove later.
     PixelFormat fmt;
     const PixelFormat& pixelformat() const
     {
@@ -370,7 +401,22 @@ public:
 
 	bool read_video_frame(void *buf) const
 	{
-        return false;
+		unsigned int video_framebuf_sz = frame_dims.width*frame_dims.height*(fmt.bits_per_pixel/8);
+		if(!feof(filepointer) && !ferror(filepointer))
+		{
+			std::size_t res = fread( buf, video_framebuf_sz, 1, filepointer );
+			fflush( filepointer );
+			if(res > 0)
+			{
+				if( pipeout ) // TODO: debug only, remove later.
+				{
+					fwrite(buf, sizeof(unsigned char), video_framebuf_sz, pipeout);
+					fflush( pipeout );
+				}
+			}
+			return true;
+		}
+		return false;
     }
 	bool read_audio_frame(void* buf) const
 	{

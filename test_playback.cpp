@@ -11,20 +11,14 @@ int main(int argc,char** argv)
 {
 	try
 	{
-		vidio::Size sz;
-		sz.width = 1280;
-		sz.height = 720;
 		vidio::Reader reader(std::string(argv[1]),"");
-		CImg<unsigned char> visu(sz.width,sz.height,1,3,0);
-		CImgDisplay main_disp(visu,"preview");
-//		cerr << "frame size: " << reader.video_frame_dimensions().width << "x" << reader.video_frame_dimensions().height << endl;
 		double fps = reader.framerate();
 		cerr << "fps: " << fps << endl;
+		vidio::Size sz = reader.video_frame_dimensions();
+		CImg<unsigned char> visu(sz.width,sz.height,1,4,0);
+		CImgDisplay main_disp(visu,"preview");
+		cerr << "frame size: " << reader.video_frame_dimensions().width << "x" << reader.video_frame_dimensions().height << endl;
 		cerr << "video frame bufsize: " << reader.video_frame_bufsize() << endl;
-		if(reader.video_frame_bufsize() > sz.width*sz.height*(24/8))
-		{
-			throw std::runtime_error("frame bufsize not initialized properly");
-		}
 		std::unique_ptr<uint8_t[]> framebuf(new uint8_t[reader.video_frame_bufsize()]);
 
 		main_disp.show();
@@ -37,15 +31,15 @@ int main(int argc,char** argv)
 		}
 		*/
 		main_disp.close();
-			
-		/*for(size_t i=0;reader.read(framebuf.get());i++)
+
+		size_t nframes = 2*fps;
+		for(size_t i=0;reader.read_video_frame(framebuf.get()) && i < nframes;i++)
 		{
-			cout << "Num Frames: " << i << "\n";
 			//for(int c=0;c<reader.frame_buffer_size;c++)
 			//{
 			//	cout << (int)framebuf[c] << " ";
 			//}
-		}*/
+		}
 	} 
 	catch(const std::exception& e)
 	{
