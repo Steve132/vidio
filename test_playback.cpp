@@ -2,7 +2,7 @@
 #include<string>
 #include"vidio.hpp"
 #include<exception>
-#include <CImg.h>
+#include "CImg.h"
 using namespace cimg_library;
 using namespace std;
 
@@ -11,20 +11,31 @@ int main(int argc,char** argv)
 {
 	try
 	{
-		vidio::Reader reader(argv[1],vidio::Size(720,480),3,1);
-		CImg<unsigned char> visu(720,480,1,3,0);
+		vidio::Size sz;
+		sz.width = 1280;
+		sz.height = 720;
+		vidio::Reader reader(std::string(argv[1]),"");
+		CImg<unsigned char> visu(sz.width,sz.height,1,3,0);
 		CImgDisplay main_disp(visu,"preview");
-		std::unique_ptr<uint8_t[]> framebuf(new uint8_t[reader.frame_buffer_size]);
+//		cerr << "frame size: " << reader.video_frame_dimensions().width << "x" << reader.video_frame_dimensions().height << endl;
+		double fps = reader.framerate();
+		cerr << "fps: " << fps << endl;
+		cerr << "video frame bufsize: " << reader.video_frame_bufsize() << endl;
+		if(reader.video_frame_bufsize() > sz.width*sz.height*(24/8))
+		{
+			throw std::runtime_error("frame bufsize not initialized properly");
+		}
+		std::unique_ptr<uint8_t[]> framebuf(new uint8_t[reader.video_frame_bufsize()]);
 
-		cerr << reader.frame_buffer_size << "EEE\n";
 		main_disp.show();
-		while (!main_disp.is_closed() && reader.read(framebuf.get()))
+		/*while (!main_disp.is_closed() && reader.read(framebuf.get()))
 		{
 			main_disp.wait(33);
-			visu.assign(framebuf.get(),3,720,480,1);
+			visu.assign(framebuf.get(),3,sz.width,sz.height,1);
 			visu.permute_axes("yzcx");
 			main_disp.display(visu);
 		}
+		*/
 		main_disp.close();
 			
 		/*for(size_t i=0;reader.read(framebuf.get());i++)
