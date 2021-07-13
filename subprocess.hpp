@@ -76,7 +76,8 @@ public:
     {
         
     }
-    void terminate();
+    void terminate()
+    {}
     int join()
     {
         int ret=-1;
