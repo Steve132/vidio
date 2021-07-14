@@ -74,7 +74,6 @@ public:
         outstream(new SubprocessIstreamBuf<subprocess_read_stdout>(&process)),
         errstream(new SubprocessIstreamBuf<subprocess_read_stderr>(&process))
     {
-        
     }
     void terminate()
     {}
@@ -87,7 +86,7 @@ public:
     ~Subprocess()
     {
         terminate();
-        join();
+        //join();
         if(m_good)
         {
             subprocess_destroy(&process);
