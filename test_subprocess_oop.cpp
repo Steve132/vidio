@@ -68,5 +68,6 @@ int main(int argc,char** argv)
     const char* cmd[] = {"/usr/bin/ffmpeg", "-i", "test.mp4", "-pix_fmt", "rgba", "-vcodec", "rawvideo", "-f", "image2pipe", "pipe:1", 0};
 
 	manual_subprocess_class(cmd);
+
     return 0;
 }
