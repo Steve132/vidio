@@ -95,26 +95,22 @@ bool parse_ffmpeg_pixfmts(
 	return true;
 }
 
-bool parse_input_pixel_fmt(const std::string& filename,const std::string& pixelformat,const vidio::FFMPEG_Install& install, std::string& parsed_pixelformat, double& parsed_fps, vidio::Size& parsed_frame_dimensions)
+    std::unique_ptr<Subprocess> ffmpeg_process; parse_input_pixel_fmt(const std::string& filename,const std::string& pixelformat,const vidio::FFMPEG_Install& install, std::string& parsed_pixelformat, double& parsed_fps, vidio::Size& parsed_frame_dimensions)
 {
 	if(!install.good())
 	{
-		return false;
+		throw std::runtime_error("FFMPEG not found.");
 	}
 	// TODO: replace rgba with pixelformat specified by input parameter
 	const char *const commandLine[] = {
 			install.ffmpeg_path().c_str(), "-i", filename.c_str(), "-pix_fmt", "rgba", "-vcodec", "rawvideo", "-f", "image2pipe", "pipe:1", 0};
-	struct subprocess_s process;
-	int ret = -1;
-	FILE *stderr_file, *stdout_file;
+	
+    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(commandLine);
 	int nchars = 128;
 	char temp[nchars];
 
-	if(subprocess_create(commandLine, 0, &process) != 0)
-		return false;
   // Note: stderr is where the pixfmt for the input is written to, but reading from stderr disables reading from stdout which contains the frame data.  The subprocess_option_combined_stdout_stderr appears to not work with ffmpeg.
-	stderr_file = subprocess_stderr(&process);
-
+	
 	int width = -1, height = -1;
 	double fps = -1;
 	string vid_fmt = "";
@@ -161,8 +157,7 @@ bool parse_input_pixel_fmt(const std::string& filename,const std::string& pixelf
 	parsed_fps = fps;
 	parsed_frame_dimensions.width = width;
 	parsed_frame_dimensions.height = height;
-	subprocess_destroy(&process);
-	return true;
+	return ffmpeg_proc;
 }
 
 
@@ -245,6 +240,7 @@ FFMPEG_Install::~FFMPEG_Install()
 class Reader::Impl
 {
 public:
+    std::unique_ptr<Subprocess> ffmpeg_process;
     Impl(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install)
     {
 		if(!install.good())
@@ -254,9 +250,14 @@ public:
 		std::string parsed_pixelformat = "";
 		double parsed_fps = -1;
 		vidio::Size parsed_frame_dimensions;
-		if(!parse_input_pixel_fmt(filename, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions)) // TODO: Update for Subprocess class once fixed: open only one ffmpeg call: integrate reading stderr for pixformat with same ffmpeg call as opening for reading once Subprocess class fixed.
-		{
-			throw std::runtime_error("Could not open for reading." + filename);
+        
+        try
+        {
+            ffmpeg_process=parse_input_pixel_fmt(filename, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions);
+        } 
+        catch(const std::exception& e)
+        {
+			throw std::runtime_error((std::string("Could not open for reading.") + filename)+e.what());
 		}
 
 		std::unordered_map<std::string,vidio::PixelFormat> valid_read_pixformats = install.valid_read_pixelformats();
@@ -273,27 +274,20 @@ public:
 		{
 			throw std::runtime_error("Could not open for reading." + filename);
 		}
-        filepointer = subprocess_stdout(&process); // TODO: update for Subprocess class once fixed.
+        //filepointer = subprocess_stdout(&process); // TODO: update for Subprocess class once fixed.
 		// TEST ONLY: Write stream to verify read
 		std::stringstream ss;
 		ss << "ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt " << "rgba" << " -s ";
 		ss << frame_dims.width << "x" << frame_dims.height;
 		ss << " -r " << static_cast<int>(fps) << " -i - -f mp4 -q:v 5 -an -vcodec mpeg4 out.mp4";
 		cerr << "Open for writing:" << ss.str() << endl;
-		pipeout = popen(ss.str().c_str(), "w");
+		//pipeout = popen(ss.str().c_str(), "w");
     }
 	~Impl()
 	{
-		if(pipeout != NULL) // TODO: debug only, remove later.
-		{
-			fflush(pipeout);
-			pclose(pipeout);
-		}
-		subprocess_destroy(&process); // TODO: remove on Subprocess class once fixed.
+		
 	}
-	struct subprocess_s process; // TODO: update for Subprocess class once fixed.
-    FILE* filepointer;
-	FILE* pipeout; // TODO: debug only, remove later.
+	
     PixelFormat fmt;
     const PixelFormat& pixelformat() const
     {
@@ -304,10 +298,7 @@ public:
 	{
         return fps;
     }
-	bool good() const
-	{
-        return filepointer && ferror(filepointer);
-    }
+
     Size frame_dims;
 	Size video_frame_dimensions() const
 	{
@@ -332,6 +323,10 @@ public:
 			return true;
 		}
 		return false;
+    }
+    bool good() const
+    {
+        return ffmpeg_process;
     }
 	bool read_audio_frame(void* buf) const
 	{
