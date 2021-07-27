@@ -47,8 +47,8 @@ int main(int argc,char** argv)
 		std::cout << "errorstream good!" << std::endl;
     std::cout << sp.errstream.rdbuf();
 	*/
-	if(sp.outstream.good())
+	if(sp.errstream.good())
 		std::cout << "outstream good!" << std::endl;
-    std::cout << sp.outstream.rdbuf();
+    std::cout << sp.errstream.rdbuf();
     return 0;
 }

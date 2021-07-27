@@ -5,6 +5,8 @@
 #include <streambuf>
 #include <iostream>
 
+
+#ifdef STREAM_INTERFACE
 class FileOstreamBuf: public std::streambuf
 {
 public:
@@ -43,11 +45,14 @@ public:
     }
 };
 
+#endif
+
 struct Subprocess
 {
 private:
     FILE* init(const char *const commandLine[])
     {
+        m_good=true;
         if(subprocess_create(commandLine, subprocess_option_enable_async | subprocess_option_inherit_environment | subprocess_option_no_window, &process) != 0)
         {
             m_good=false;
@@ -56,27 +61,32 @@ private:
         return subprocess_stdin(&process);
     }
 
-	struct subprocess_s process;
-public:
     bool m_good;
-        
-    std::ostream instream;
-    std::istream outstream;
-    std::istream errstream;
-    
-    
+	struct subprocess_s process;
+    FILE* input_fp;
+public:
     operator bool() const{ return m_good; }
     
+    unsigned int write_to_stdin(const char* buf,unsigned int n)
+    {
+        return fwrite(buf,n,1,input_fp);
+    }
+    unsigned int read_from_stdout(char* buf,unsigned int n)
+    {
+        return subprocess_read_stdout(&process,buf,n);
+    }
+    unsigned int read_from_stderr(char* buf,unsigned int n)
+    {
+        return subprocess_read_stderr(&process,buf,n);
+    }
     
     Subprocess(const char *const commandLine[]):
-        m_good(true),
-        instream(new FileOstreamBuf(init(commandLine))),
-        outstream(new SubprocessIstreamBuf<subprocess_read_stdout>(&process)),
-        errstream(new SubprocessIstreamBuf<subprocess_read_stderr>(&process))
-    {
-    }
-    void terminate()
+        m_good(true),input_fp(init(commandLine))
     {}
+    void terminate()
+    {
+       // if(m_good &&subprocess_alive(&process)) subprocess_terminate(&process,&ret);
+    }
     int join()
     {
         int ret=-1;
