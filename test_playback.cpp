@@ -18,7 +18,7 @@ int main(int argc,char** argv)
 		CImg<unsigned char> visu(sz.width,sz.height,1,4,0);
 		CImgDisplay main_disp(visu,"preview");
 		cerr << "frame size: " << reader.video_frame_dimensions().width << "x" << reader.video_frame_dimensions().height << endl;
-		cerr << "video frame bufsize: " << reader.video_frame_bufsize() << endl;
+		cerr << "video frame bufsize: " << reader.video_frame_bufsize() << endl; // video frame bufsize: 3686400
 		std::unique_ptr<uint8_t[]> framebuf(new uint8_t[reader.video_frame_bufsize()]);
 
 		main_disp.show();
