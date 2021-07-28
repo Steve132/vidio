@@ -314,17 +314,22 @@ public:
 	bool read_video_frame(void *buf) const
 	{
 		unsigned int video_framebuf_sz = frame_dims.width*frame_dims.height*(fmt.bits_per_pixel/8);
-		std::size_t res = ffmpeg_process->read_from_stdout(static_cast<char*>(buf), video_framebuf_sz);
-		if(res > 0)
+
+		uint8_t* tmpbuf = static_cast<uint8_t*>(buf);
+		std::size_t res;
+		for(std::size_t bytes_read = 0; bytes_read < video_framebuf_sz; bytes_read += res)
 		{
-			if( pipeout )
-			{
-				fwrite(buf, sizeof(char), video_framebuf_sz, pipeout);
-				fflush( pipeout );
-			}
-			return true;
+			res = ffmpeg_process->read_from_stdout(reinterpret_cast<char*>(tmpbuf + bytes_read), video_framebuf_sz - bytes_read);
+			if(res == 0)
+				return false;
 		}
-		return false;
+
+		if( pipeout )
+		{
+			fwrite(buf, sizeof(char), video_framebuf_sz, pipeout);
+			fflush( pipeout );
+		}
+		return true;
     }
     bool good() const
     {
