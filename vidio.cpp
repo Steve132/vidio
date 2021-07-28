@@ -102,9 +102,8 @@ bool parse_ffmpeg_pixfmts(
 	{
 		throw std::runtime_error("FFMPEG not found.");
 	}
-	// TODO: replace rgba with pixelformat specified by input parameter
 	const char *const commandLine[] = {
-			install.ffmpeg_path().c_str(), "-i", filename.c_str(), "-pix_fmt", "rgba", "-vcodec", "rawvideo", "-f", "image2pipe", "pipe:1", 0};
+			install.ffmpeg_path().c_str(), "-i", filename.c_str(), "-pix_fmt", (pixelformat == "" ? "rgba" : pixelformat.c_str()), "-vcodec", "rawvideo", "-f", "rawvideo", "-", 0};
 	
     std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(commandLine);
 	int nchars = 256;
@@ -117,9 +116,7 @@ bool parse_ffmpeg_pixfmts(
 	string vid_fmt = "";
 	while(fps == -1)
 	{
-		//fgets(temp, nchars, stderr_file);
 		int ret = ffmpeg_proc->read_from_stderr(temp, nchars);
-		std::cerr << std::endl; // flush stderr!
 		if(ret <= 0)
 		{
 			break; // end of err stream.
@@ -267,7 +264,7 @@ public:
         {
 			throw std::runtime_error((std::string("Could not open for reading.") + filename)+e.what());
 		}
-		std::cerr << "parsed input pixel format" << std::endl;
+		std::cerr << "parsed input pixel format" << parsed_pixelformat << std::endl;
 		std::unordered_map<std::string,vidio::PixelFormat> valid_read_pixformats = install.valid_read_pixelformats();
 		std::string raw_pixformat = "rgba";
         fmt=valid_read_pixformats[raw_pixformat]; //parsed_pixelformat]; // TODO: Update for parsed_pixelformat or input pixelformat rather than rgba!
