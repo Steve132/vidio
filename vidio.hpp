@@ -59,7 +59,7 @@ public:
 	Size video_frame_dimensions() const;
 	size_t video_frame_bufsize() const {
 		Size sz=video_frame_dimensions();
-		return sz.width*sz.height*(pixelformat().bits_per_pixel/8);
+		return (sz.width*sz.height*static_cast<size_t>(pixelformat().bits_per_pixel))/8;
 	}
 	
 	bool read_video_frame(void *buf) const;

@@ -43,8 +43,7 @@ public:
     int join()
     {
         int ret=-1;
-        if(subprocess_alive(&process)) 
-            subprocess_join(&process, &ret);
+        subprocess_join(&process, &ret);
         return ret;
     }
     ~Subprocess()
