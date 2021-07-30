@@ -89,29 +89,16 @@ bool parse_ffmpeg_pixfmts(
 	return ffproc.join()==0;
 }
 
-    std::unique_ptr<Subprocess> parse_input_pixel_fmt_and_open(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat,const vidio::FFMPEG_Install& install, std::string& parsed_pixelformat, double& parsed_fps, vidio::Size& parsed_frame_dimensions)
+    std::unique_ptr<Subprocess> parse_input_pixel_fmt(const std::string& filename,const std::string& pixelformat,const vidio::FFMPEG_Install& install, std::string& parsed_pixelformat, double& parsed_fps, vidio::Size& parsed_frame_dimensions)
 {
 	if(!install.good())
 	{
 		throw std::runtime_error("FFMPEG not found.");
 	}
+	const char *const commandLine[] = {
+			install.ffmpeg_path().c_str(),"-hide_banner","-i", filename.c_str(), "-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
 	
-	std::vector<const char*> cmdLine;
-    cmdLine.emplace_back(install.ffmpeg_path().c_str());
-    cmdLine.emplace_back("-hide_banner");
-    
-	for(const std::string& ia : ffmpeg_input_args)
-    {
-        cmdLine.push_back(ia.c_str());
-    }
-    const char *const commandLinePostfix[] = {"-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
-	
-    for(const char* const* clP=commandLinePostfix;*clP!=0;clP++)
-    {
-        cmdLine.push_back(*clP);
-    }
-	
-    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
+    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(commandLine);
 	
 	std::string temps;
 
@@ -248,7 +235,7 @@ class Reader::Impl
 {
 public:
     std::unique_ptr<Subprocess> ffmpeg_process;
-    Impl(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat,const FFMPEG_Install& install)
+    Impl(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install)
     {
 		if(!install.good())
 		{
@@ -259,11 +246,11 @@ public:
 		vidio::Size parsed_frame_dimensions;
         try
         {
-            ffmpeg_process=parse_input_pixel_fmt_and_open(ffmpeg_input_args, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions);
+            ffmpeg_process=parse_input_pixel_fmt(filename, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions);
         } 
         catch(const std::exception& e)
         {
-			throw std::runtime_error((std::string("Could not open for reading.") )+e.what());
+			throw std::runtime_error((std::string("Could not open for reading.") + filename)+e.what());
 		}
         
 		//std::cerr << "parsed input pixel format " << parsed_pixelformat << std::endl;
@@ -336,7 +323,7 @@ public:
 
 
 Reader::Reader(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install):
-    impl(std::make_shared<Reader::Impl>(std::vector<std::string>{"-i",filename},pixelformat,install))
+    impl(std::make_shared<Reader::Impl>(filename,pixelformat,install))
 {}
 
 Reader::~Reader()
