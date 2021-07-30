@@ -14,4 +14,6 @@ add_executable(test_playback test_playback.cpp CImg.h)
 target_link_libraries(test_playback vidio X11 pthread)
 add_executable(test_subprocess_oop test_subprocess_oop.cpp subprocess.hpp)
 
+add_executable(vidio_demo_play_file demo_play_file.cpp CImg.h)
+target_link_libraries(vidio_demo_play_file vidio X11 pthread)
 endif()
