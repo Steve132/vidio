@@ -52,6 +52,7 @@ protected:
 	std::shared_ptr<Impl> impl;
 public:
 	Reader(const std::string& filename,const std::string& pixelformat="",const FFMPEG_Install& install=FFMPEG_Install());
+    Reader(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat="",const FFMPEG_Install& install=FFMPEG_Install());
 
 	const PixelFormat& pixelformat() const;
     const PixelFormat& native_pixelformat() const;
