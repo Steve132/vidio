@@ -96,7 +96,7 @@ bool parse_ffmpeg_pixfmts(
 		throw std::runtime_error("FFMPEG not found.");
 	}
 	const char *const commandLine[] = {
-			install.ffmpeg_path().c_str(),"-hide_banner","-i", filename.c_str(), "-pix_fmt", (pixelformat == "" ? "rgba" : pixelformat.c_str()), "-vcodec", "rawvideo", "-f", "rawvideo", "-", 0};
+			install.ffmpeg_path().c_str(),"-hide_banner","-i", filename.c_str(), "-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
 	
     std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(commandLine);
 	
@@ -146,7 +146,7 @@ bool parse_ffmpeg_pixfmts(
 			break;
 		}
 	}
-	cerr << "Detected video format for: " << filename << ": " << vid_fmt << " " << fps << "fps " << width << "x" << height << endl;
+	//cerr << "Detected video format for: " << filename << ": " << vid_fmt << " " << fps << "fps " << width << "x" << height << endl;
 	parsed_pixelformat = vid_fmt;
 	parsed_fps = fps;
 	parsed_frame_dimensions.width = width;
@@ -252,10 +252,11 @@ public:
         {
 			throw std::runtime_error((std::string("Could not open for reading.") + filename)+e.what());
 		}
-		std::cerr << "parsed input pixel format " << parsed_pixelformat << std::endl;
+        
+		//std::cerr << "parsed input pixel format " << parsed_pixelformat << std::endl;
 		const std::unordered_map<std::string,vidio::PixelFormat>& valid_read_pixformats = install.valid_read_pixelformats();
-		std::string raw_pixformat = "rgba";
-        fmt=valid_read_pixformats.at(raw_pixformat); //parsed_pixelformat]; // TODO: Update for parsed_pixelformat or input pixelformat rather than rgba!
+		fmt=valid_read_pixformats.at(pixelformat);
+        native_fmt=valid_read_pixformats.at(parsed_pixelformat);
 		frame_dims.width = parsed_frame_dimensions.width;
 		frame_dims.height = parsed_frame_dimensions.height;
 		fps = parsed_fps;
@@ -271,6 +272,11 @@ public:
     {
         return fmt;
     }
+    PixelFormat native_fmt;
+    const PixelFormat& native_pixelformat() const
+    {
+        return native_fmt;
+    }
     double fps;
 	double framerate() const
 	{
@@ -282,10 +288,15 @@ public:
 	{
         return frame_dims;
     }
+    
+    size_t  video_frame_bufsize () const {
+		Size sz=video_frame_dimensions();
+		return (sz.width*sz.height*static_cast<size_t>(pixelformat().bits_per_pixel))/8;
+	}
 
 	bool read_video_frame(void *buf) const
 	{
-		unsigned int video_framebuf_sz = frame_dims.width*frame_dims.height*(fmt.bits_per_pixel/8);
+		unsigned int video_framebuf_sz = video_frame_bufsize();
 
 		uint8_t* tmpbuf = static_cast<uint8_t*>(buf);
 		std::size_t res;
@@ -322,6 +333,10 @@ const PixelFormat& Reader::pixelformat() const
 {
     return impl->pixelformat();
 }
+const PixelFormat& Reader::native_pixelformat() const
+{
+    return impl->pixelformat();
+}
 double Reader::framerate() const
 {
     return impl->framerate();
@@ -334,7 +349,9 @@ Size Reader::video_frame_dimensions() const
 {
     return impl->video_frame_dimensions();
 }
-
+size_t  Reader::video_frame_bufsize () const {
+    return impl->video_frame_bufsize();
+}
 bool Reader::read_video_frame(void *buf) const
 {
     return impl->read_video_frame(buf);

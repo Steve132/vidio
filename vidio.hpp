@@ -54,13 +54,11 @@ public:
 	Reader(const std::string& filename,const std::string& pixelformat="",const FFMPEG_Install& install=FFMPEG_Install());
 
 	const PixelFormat& pixelformat() const;
+    const PixelFormat& native_pixelformat() const;
 	double framerate() const;
 	bool good() const;
 	Size video_frame_dimensions() const;
-	size_t video_frame_bufsize() const {
-		Size sz=video_frame_dimensions();
-		return (sz.width*sz.height*static_cast<size_t>(pixelformat().bits_per_pixel))/8;
-	}
+	size_t video_frame_bufsize() const;
 	
 	bool read_video_frame(void *buf) const;
 	bool read_audio_frame(void* buf) const;
@@ -84,7 +82,7 @@ public:
 	Writer(const std::string& filename,
 		const Size& size,
 		double framerate,
-		const std::string& fmt="rgba",
+		const std::string& fmt="rgb24",
 		const std::string& encode_ffmpeg_params="",
 		const FFMPEG_Install& install=FFMPEG_Install());
 
