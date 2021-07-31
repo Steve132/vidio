@@ -39,7 +39,7 @@ public:
     
     const std::unordered_map<std::string,PixelFormat>& valid_read_pixelformats() const;
     const std::unordered_map<std::string,PixelFormat>& valid_write_pixelformats() const;
-	const std::string ffmpeg_path() const;
+	const std::string& ffmpeg_path() const;
     
     bool good() const;
     operator bool(){ return good(); }

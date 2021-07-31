@@ -98,7 +98,22 @@ bool parse_ffmpeg_pixfmts(
 	const char *const commandLine[] = {
 			install.ffmpeg_path().c_str(),"-hide_banner","-i", filename.c_str(), "-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
 	
-    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(commandLine);
+	std::vector<const char*> cmdLine;
+    cmdLine.emplace_back(install.ffmpeg_path().c_str());
+    cmdLine.emplace_back("-hide_banner");
+    
+	for(const std::string& ia : ffmpeg_input_args)
+    {
+        cmdLine.push_back(ia.c_str());
+    }
+    const char *const commandLinePostfix[] = {"-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
+	
+    for(const char* const* clP=commandLinePostfix;*clP!=0;clP++)
+    {
+        cmdLine.push_back(*clP);
+    }
+	cmdLine.push_back(0);
+    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
 	
 	std::string temps;
 
@@ -164,7 +179,7 @@ class FFMPEG_Install::Impl
 public:
 	
 	bool good() const {return m_good;}
-	const std::string ffmpeg_path() const {return str_ffmpeg_path;}
+	const std::string& ffmpeg_path() const {return str_ffmpeg_path;}
 
 	bool m_good;
 	std::string str_ffmpeg_path;
@@ -211,7 +226,7 @@ const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_write_
     return impl->writeable_formats;
 }
 
-const std::string FFMPEG_Install::ffmpeg_path() const
+const std::string& FFMPEG_Install::ffmpeg_path() const
 {
 	return impl->ffmpeg_path();
 }
