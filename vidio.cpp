@@ -110,7 +110,7 @@ bool parse_ffmpeg_pixfmts(
     {
         cmdLine.push_back(*clP);
     }
-	
+	cmdLine.push_back(0);
     std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
 	
 	std::string temps;
@@ -177,7 +177,7 @@ class FFMPEG_Install::Impl
 public:
 	
 	bool good() const {return m_good;}
-	const std::string ffmpeg_path() const {return str_ffmpeg_path;}
+	const std::string& ffmpeg_path() const {return str_ffmpeg_path;}
 
 	bool m_good;
 	std::string str_ffmpeg_path;
@@ -224,7 +224,7 @@ const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_write_
     return impl->writeable_formats;
 }
 
-const std::string FFMPEG_Install::ffmpeg_path() const
+const std::string& FFMPEG_Install::ffmpeg_path() const
 {
 	return impl->ffmpeg_path();
 }
