@@ -6,6 +6,7 @@
 #include<iostream>
 #include<sstream>
 #include<cstring>
+#include <stdexcept>
 #include "subprocess.hpp"
 using namespace std;
 
@@ -38,23 +39,21 @@ static bool getline_subprocess_stdout(Subprocess& proc,std::string& result,int e
 //the default loglevel should 
 
 bool parse_ffmpeg_pixfmts(
-    std::unordered_map<std::string,vidio::PixelFormat>& input_pixel_formats, 
-    std::unordered_map<std::string,vidio::PixelFormat>& output_pixel_formats, 
+    std::unordered_map<std::string,vidio::FFMPEG_Install::PixFormat>& pixfmts,
     const std::string& default_ffmpeg_path = "/usr/bin/ffmpeg")
 {
 	const char *const commandLine[] = {default_ffmpeg_path.c_str(), "-hide_banner","-v","24","-pix_fmts", 0};
 
     Subprocess ffproc(commandLine); // TODO: Fix Subprocess initialization!
 	
-	input_pixel_formats.clear();
-	output_pixel_formats.clear();
+    pixfmts.clear();
 	bool line_is_a_format = false;
     std::string temps;
 	while(getline_subprocess_stdout(ffproc,temps))
 	{
 		if(line_is_a_format) // IO... yuv420p                3            12
 		{
-			vidio::PixelFormat pixfmt;
+			vidio::FFMPEG_Install::PixFormat pixfmt;
 			size_t pixfmt_ind = temps.find(" ", 6); // skip "IO... "
 			if(pixfmt_ind != std::string::npos)
 			{
@@ -68,15 +67,9 @@ bool parse_ffmpeg_pixfmts(
 			if((pixfmt_ind != std::string::npos) && (bpp_ind != std::string::npos))
 			{
 				pixfmt.num_components = stoi(temps.substr(pixfmt_ind + 1, bpp_ind - (pixfmt_ind + 1)));
-
-				if(temps[0] == 'I')
-				{
-					input_pixel_formats[pixfmt.name]=pixfmt;
-				}
-				if(temps[1] == 'O')
-				{
-					output_pixel_formats[pixfmt.name]=pixfmt;
-				}
+                pixfmt.readable =temps[1] == 'O';
+                pixfmt.writable =temps[0] == 'I';
+                pixfmts[pixfmt.name]=pixfmt;
 			}
 		}
 		if(temps.find("FLAGS") != std::string::npos)
@@ -89,15 +82,13 @@ bool parse_ffmpeg_pixfmts(
 	return ffproc.join()==0;
 }
 
-    std::unique_ptr<Subprocess> parse_input_pixel_fmt(const std::string& filename,const std::string& pixelformat,const vidio::FFMPEG_Install& install, std::string& parsed_pixelformat, double& parsed_fps, vidio::Size& parsed_frame_dimensions)
+    std::unique_ptr<Subprocess> parse_input_pixel_fmt(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat,const vidio::FFMPEG_Install& install, std::string& parsed_pixelformat, double& parsed_fps, vidio::Size& parsed_frame_dimensions)
 {
 	if(!install.good())
 	{
 		throw std::runtime_error("FFMPEG not found.");
 	}
-	const char *const commandLine[] = {
-			install.ffmpeg_path().c_str(),"-hide_banner","-i", filename.c_str(), "-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
-	
+
 	std::vector<const char*> cmdLine;
     cmdLine.emplace_back(install.ffmpeg_path().c_str());
     cmdLine.emplace_back("-hide_banner");
@@ -106,12 +97,17 @@ bool parse_ffmpeg_pixfmts(
     {
         cmdLine.push_back(ia.c_str());
     }
-    const char *const commandLinePostfix[] = {"-vcodec", "rawvideo", "-f", "rawvideo", "-pix_fmt", (pixelformat == "" ? "rgb24" : pixelformat.c_str()),  "-", 0};
-	
-    for(const char* const* clP=commandLinePostfix;*clP!=0;clP++)
+    cmdLine.push_back("-vcodec");
+    cmdLine.push_back("rawvideo");
+    cmdLine.push_back("-f");
+    cmdLine.push_back("rawvideo");
+    if(pixelformat != "")
     {
-        cmdLine.push_back(*clP);
+        cmdLine.push_back("-pix_fmt");
+        cmdLine.push_back(pixelformat.c_str());
     }
+    
+    cmdLine.push_back("-");
 	cmdLine.push_back(0);
     std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
 	
@@ -183,8 +179,7 @@ public:
 
 	bool m_good;
 	std::string str_ffmpeg_path;
-	std::unordered_map<std::string,vidio::PixelFormat> readable_formats; //"O"
-	std::unordered_map<std::string,vidio::PixelFormat> writeable_formats; //"I"
+	std::unordered_map<std::string,vidio::FFMPEG_Install::PixFormat> pixfmts;
     Impl(const std::vector<std::string>& additional_search_locations={})
     {
         // call pix_fmts with default install location and if it doesn't work, test additional_search_locations
@@ -193,12 +188,12 @@ public:
         platform_defaults.insert(platform_defaults.end(),additional_search_locations.begin(),additional_search_locations.end());
         m_good = false;
         
-        std::unordered_map<std::string,PixelFormat> input_pixel_formats,output_pixel_formats;
+        std::unordered_map<std::string,vidio::FFMPEG_Install::PixFormat> tpixformats;
         for(
             std::vector<std::string>::const_iterator search_location = platform_defaults.begin(); 
         !m_good && search_location != platform_defaults.end(); search_location++)
         {
-            m_good = parse_ffmpeg_pixfmts(input_pixel_formats, output_pixel_formats, *search_location);
+            m_good = parse_ffmpeg_pixfmts(tpixformats, *search_location);
             if(m_good)
             {
                 str_ffmpeg_path = *search_location;
@@ -206,8 +201,7 @@ public:
         }
         if(m_good)
         {
-            writeable_formats=input_pixel_formats;
-            readable_formats=output_pixel_formats;
+            pixfmts=tpixformats;
         }
         else
         {
@@ -217,13 +211,9 @@ public:
 };
 
 
-const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_read_pixelformats() const
+const std::unordered_map<std::string,vidio::FFMPEG_Install::PixFormat>&  FFMPEG_Install::pixformats() const
 {
-    return impl->readable_formats;
-}
-const std::unordered_map<std::string,PixelFormat>&  FFMPEG_Install::valid_write_pixelformats() const
-{
-    return impl->writeable_formats;
+    return impl->pixfmts;
 }
 
 const std::string& FFMPEG_Install::ffmpeg_path() const
@@ -250,36 +240,63 @@ class Reader::Impl
 {
 public:
     std::unique_ptr<Subprocess> ffmpeg_process;
-    Impl(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install)
+    Impl(const std::vector<std::string>& ffmpeg_input_args, const std::string& requested_pixelformat,const FFMPEG_Install& install)
     {
 		if(!install.good())
 		{
 			throw std::runtime_error("FFMPEG Installation not found.");
 		}
-		std::string parsed_pixelformat = "";
-		double parsed_fps = -1;
+		std::string native_pixelformat = "";
+        std::string actual_pixelformat = requested_pixelformat;
+        
+        const std::unordered_map<std::string,vidio::FFMPEG_Install::PixFormat>& pixformats = install.pixformats();
+        
+        double parsed_fps = -1;
 		vidio::Size parsed_frame_dimensions;
         try
         {
-            ffmpeg_process=parse_input_pixel_fmt(filename, pixelformat, install, parsed_pixelformat, parsed_fps, parsed_frame_dimensions);
+            ffmpeg_process=parse_input_pixel_fmt(ffmpeg_input_args, actual_pixelformat, install, native_pixelformat, parsed_fps, parsed_frame_dimensions);
         } 
         catch(const std::exception& e)
         {
-			throw std::runtime_error((std::string("Could not open for reading.") + filename)+e.what());
+			throw std::runtime_error((std::string("Could not open for reading."))+e.what());
 		}
+        if(requested_pixelformat == "")
+        {
+            actual_pixelformat=native_pixelformat;
+        }
         
-		//std::cerr << "parsed input pixel format " << parsed_pixelformat << std::endl;
-		const std::unordered_map<std::string,vidio::PixelFormat>& valid_read_pixformats = install.valid_read_pixelformats();
-		fmt=valid_read_pixformats.at(pixelformat);
-        native_fmt=valid_read_pixformats.at(parsed_pixelformat);
+        auto rnative=pixformats.find(native_pixelformat);
+        native_fmt={"0",0,0};
+        if(rnative == pixformats.end())
+        {
+            if(actual_pixelformat == native_pixelformat) {
+                throw std::runtime_error(std::string("Could not find metatdata for raw input pixelformat '")+actual_pixelformat+"'");
+            }
+        }
+        else
+        {
+            native_fmt=rnative->second;
+        }
+        
+        if(actual_pixelformat==native_pixelformat)
+        {
+            fmt=native_fmt;
+        }
+        else
+        {
+            auto rout=pixformats.find(actual_pixelformat);
+            if(rout == pixformats.end()){
+                throw std::runtime_error(std::string("Pixelformat is not a valid read pixelformat for this ffmpeg '")+actual_pixelformat+"'");
+            }
+            fmt=rout->second;
+        }
 		frame_dims.width = parsed_frame_dimensions.width;
 		frame_dims.height = parsed_frame_dimensions.height;
 		fps = parsed_fps;
     }
 	~Impl()
 	{
-	//	pclose(pipeout);
-	//	pipeout = NULL;
 	}
 	
     PixelFormat fmt;
@@ -337,10 +354,12 @@ public:
 
 
 
-Reader::Reader(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install):
-    impl(std::make_shared<Reader::Impl>(filename,pixelformat,install))
+Reader::Reader(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat,const FFMPEG_Install& install):
+    impl(std::make_shared<Reader::Impl>(ffmpeg_input_args,pixelformat,install))
 {}
-
+Reader::Reader(const std::string& filename,const std::string& pixelformat,const FFMPEG_Install& install):
+    impl(std::make_shared<Reader::Impl>(std::vector<std::string>{"-i",filename},pixelformat,install))
+{}
 Reader::~Reader()
 {}
 

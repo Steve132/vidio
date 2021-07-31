@@ -19,9 +19,9 @@ struct Size
 
 struct PixelFormat
 {
-	std::string name;
-	unsigned num_components;
-	unsigned bits_per_pixel;
+    std::string name;
+    unsigned num_components;
+    unsigned bits_per_pixel;
 };
 
 class Reader;
@@ -34,11 +34,15 @@ protected:
     friend class Reader;
     friend class Writer;
 public:
+    struct PixFormat:public PixelFormat
+    {
+        bool readable,writable;
+    };
+
     FFMPEG_Install(const std::vector<std::string>& extra_ffmpeg_locations={});
     ~FFMPEG_Install();
     
-    const std::unordered_map<std::string,PixelFormat>& valid_read_pixelformats() const;
-    const std::unordered_map<std::string,PixelFormat>& valid_write_pixelformats() const;
+    const std::unordered_map<std::string,PixFormat>& pixformats() const;
 	const std::string& ffmpeg_path() const;
     
     bool good() const;
@@ -52,7 +56,7 @@ protected:
 	std::shared_ptr<Impl> impl;
 public:
 	Reader(const std::string& filename,const std::string& pixelformat="",const FFMPEG_Install& install=FFMPEG_Install());
-
+	Reader(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat="",const FFMPEG_Install& install=FFMPEG_Install());
 	const PixelFormat& pixelformat() const;
     const PixelFormat& native_pixelformat() const;
 	double framerate() const;
