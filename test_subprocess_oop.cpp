@@ -9,7 +9,7 @@ int manual_subprocess(const char* const* cmd)
 	if(subprocess_create(cmd, subprocess_option_enable_async | subprocess_option_inherit_environment | subprocess_option_no_window, &process) != 0)
 		return -1;
 
-	int nchars = 128, nerrchars = nchars * 2;
+	const int nchars = 128, nerrchars = nchars * 2;
 	char buf[nchars], errbuf[nerrchars];
 	memset(buf, '\0', nchars);
 	memset(errbuf, '\0', nerrchars);
@@ -37,7 +37,7 @@ int manual_subprocess_class(const char* const* cmd)
 {
     Subprocess sp{cmd};
 
-	int nchars = 128, nerrchars = nchars * 2;
+	const int nchars = 128, nerrchars = nchars * 2;
 	char buf[nchars], errbuf[nerrchars];
 	memset(buf, '\0', nchars);
 	memset(errbuf, '\0', nerrchars);
