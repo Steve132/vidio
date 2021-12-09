@@ -78,7 +78,6 @@ bool parse_ffmpeg_pixfmts(
 			line_is_a_format = true;
 		}
 	}
-
 	return ffproc.join()==0;
 }
 
@@ -122,6 +121,7 @@ bool parse_ffmpeg_pixfmts(
 		{
 			break; // end of err stream.
 		}
+        std::cout << "Current line of open FFMPEG PROCESS: " << temps << std::endl;
 		// look for format ex: Stream #0:0(und): Video: h264 (Main) (avc1 / 0x31637661), yuv420p, 1280x720 [SAR 1:1 DAR 16:9], 862 kb/s, 25 fps, 25 tbr, 12800 tbn, 50 tbc (default)
 		size_t vind = temps.find("Video:");
 		if((temps.find("Stream #0") != string::npos &&
@@ -129,31 +129,33 @@ bool parse_ffmpeg_pixfmts(
 		{
 			size_t start_fmt_ind = temps.find(",", vind)+1;
 			size_t end_fmt_ind = temps.find(",", start_fmt_ind);
-			if((start_fmt_ind != string::npos &&
-				end_fmt_ind != string::npos))
-			{
-				vid_fmt = temps.substr(start_fmt_ind+1, end_fmt_ind-(start_fmt_ind+1));
-				size_t end_aspect_ratio_ind = temps.find(" ", end_fmt_ind+2);
-				if(end_aspect_ratio_ind != string::npos)
-				{
-					string aspect_ratio = temps.substr(end_fmt_ind+2, end_aspect_ratio_ind - (end_fmt_ind+1));
-					size_t xind = aspect_ratio.find("x");
-					if(xind != string::npos)
-					{
-						width = stoi(aspect_ratio.substr(0,xind));
-						height = stoi(aspect_ratio.substr(xind+1));
-					}
-				}
-			}
-			size_t fps_ind = temps.find("fps");
-			if(fps_ind != string::npos)
-			{
-				size_t start_fps_ind = temps.rfind(",", fps_ind) + 2;
-				if(start_fps_ind != string::npos)
-				{
-					fps = stod(temps.substr(start_fps_ind, fps_ind-start_fps_ind));
-				}
-			}
+            if ((start_fmt_ind != string::npos &&
+                end_fmt_ind != string::npos))
+            {
+                vid_fmt = temps.substr(start_fmt_ind + 1, end_fmt_ind - (start_fmt_ind + 1));
+            }
+            std::stringstream ss(temps.substr(vind));
+            std::string property;
+            while (std::getline(ss, property, ','))
+            {
+                if (property.find("x") != std::string::npos)
+                {
+                    std::stringstream aspect_ratio_ss(property);
+                    char tmp;
+                    aspect_ratio_ss >> width;
+                    if (width == 0)
+                    {
+                        continue;
+                    }
+                    aspect_ratio_ss >> tmp;
+                    aspect_ratio_ss >> height;
+                }
+                if (property.find("fps") != std::string::npos)
+                {
+                    std::stringstream fps_ss(property);
+                    fps_ss >> fps;
+                }
+            }
 			break;
 		}
 	}
@@ -183,7 +185,7 @@ public:
     Impl(const std::vector<std::string>& additional_search_locations={})
     {
         // call pix_fmts with default install location and if it doesn't work, test additional_search_locations
-        std::vector<std::string> platform_defaults = {"/usr/bin/ffmpeg"};
+        std::vector<std::string> platform_defaults = {"ffmpeg.exe", "/usr/bin/ffmpeg"}; // remove ffmpeg.exe if not in windows.
         std::string ffmpeg_path = "";
         platform_defaults.insert(platform_defaults.end(),additional_search_locations.begin(),additional_search_locations.end());
         m_good = false;
