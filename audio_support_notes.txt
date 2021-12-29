@@ -1,18 +1,79 @@
-Named pipe output for stream 0 video and separate named pipe for stream 1 audio.  This is so that you're not reading interleaved video and audio, which is *very complicated*.
+# Audio Support for Vidio
+Required: Named pipe output for stream 0 video and separate named pipe for stream 1 audio.  This is so that you're not reading interleaved video and audio, which is *very complicated*.
 
 Tell ffmpeg in subprocess call to output video to a named pipe and audio to another named pipe. Will need to open and listen to these named pipes.
 https://trac.ffmpeg.org/ticket/1663:
 mkfifo /tmp/aaa /tmp/vvv
 ffmpeg -y -i 1.flv -map 0:a -f u16le -acodec pcm_s16le -ac 2 -ar 44100 /tmp/aaa -map 0:v -f yuv4mpegpipe -vcodec rawvideo /tmp/vvv
 
-Then make 2 distinct consumer processes which consume the named pipes to confirm the separate streams are working i.e.:
+Then make 2 distinct consumer aka reader processes which consume the named pipes to confirm the separate streams are working i.e.:
 ffmpeg -y -i /tmp/aaa 1_audio.avi &
 ffmpeg -y -i /tmp/vvv 1_video.avi
 Once confirmed, for vidio, we'll be consuming one frame at a time.
 
+## Done: Named Pipe class with Linux Support
+named_pipe.hpp
+named_pipe.cpp
+test_named_pipe.cpp
 
-Creating named pipes with mkfifo:
-Linux first: 
-https://www.geeksforgeeks.org/named-pipe-fifo-example-c-program/
+## Named Pipe class with Windows Support
+Create a pipe with CreateNamedPipe with PIPE_ACCESS_DUPLEX and e.g. a GUID name and create a symbolic link to this pipe in the target directory with DeviceIoControl / FSCTL_SET_REPARSE_POINT. This should be quite close to mkfifo.
 
-Windows: create a pipe with CreateNamedPipe with PIPE_ACCESS_DUPLEX and e.g. a GUID name and create a symbolic link to this pipe in the target directory with DeviceIoControl / FSCTL_SET_REPARSE_POINT. This should be quite close to mkfifo.
+# Output to single video with audio from separate named pipes for audio and video:
+https://ffmpeg.org/faq.html#Concatenating-using-raw-audio-and-video:
+mkfifo temp1.a
+mkfifo temp1.v
+ffmpeg -i input1.flv -vn -f u16le -c:a pcm_s16le -ac 2 -ar 44100 - > temp1.a < /dev/null &
+ffmpeg -i input1.flv -an -f yuv4mpegpipe - > temp1.v < /dev/null &
+ffmpeg -f u16le -c:a pcm_s16le -ac 2 -ar 44100 -i temp1.a \
+       -f yuv4mpegpipe -i temp1.v \
+       -y output.flv
+
+# Next Steps:
+- [ ] Audio parsing from audio-only stream i.e. ffmpeg of an mp3
+	- [ ] Parse available audio formats: parse_ffmpeg_audiofmts()
+	- [ ] Parse audio format: parse_input_audio_fmt()
+	- [ ] read_audio_frame()
+	- [ ] Update test_playback.cpp to call read_audio_frame() from mp3
+
+- [ ] Read ffmpeg video with audio stream and split into 2 named pipes, reading both pipes.
+mkfifo /tmp/aaa /tmp/vvv
+ffmpeg -y -i 1.flv -map 0:a -f u16le -acodec pcm_s16le -ac 2 -ar 44100 /tmp/aaa -map 0:v -f yuv4mpegpipe -vcodec rawvideo /tmp/vvv
+	- [ ] Call Vidio read_audio_frame on named_pipe Reader on audio pipe: /tmp/aaa
+	- [ ] Call Vidio read_video_frame on named_pipe Reader on video pipe: /tmp/vvv
+
+- [ ] Audio writing:
+	- [ ] write_audio_frame()
+	- [ ] Update test_copy.cpp to write audio stream.
+
+- [ ] Write ffmpeg video with audio stream into 2 separate files in Vidio:
+	ffmpeg -y -i /tmp/aaa 1_audio.avi &
+	ffmpeg -y -i /tmp/vvv 1_video.avi
+	- [ ] Call Vidio write_audio_frame() on named_pipe Writer on audio pipe: /tmp/aaa
+	- [ ] Call Vidio write_video_frame() on named_pipe Writer on video pipe: /tmp/vvv
+	- [ ] Update test_copy.cpp to include this example
+
+- [ ] Windows support
+	- [ ] Named pipe opening under windows
+	- [ ] parse_ffmpeg_audiofmts()
+	- [ ] parse_input_audio_fmt()
+
+- [ ] Write ffmpeg video with audio stream into single video file in Vidio:
+https://ffmpeg.org/faq.html#Concatenating-using-raw-audio-and-video
+mkfifo temp1.a
+mkfifo temp1.v
+ffmpeg -i input1.flv -vn -f u16le -c:a pcm_s16le -ac 2 -ar 44100 - > temp1.a < /dev/null &
+ffmpeg -i input1.flv -an -f yuv4mpegpipe - > temp1.v < /dev/null &
+ffmpeg -f u16le -c:a pcm_s16le -ac 2 -ar 44100 -i temp1.a \
+       -f yuv4mpegpipe -i temp1.v \
+       -y output.flv
+	- [ ] Vidio writer detects audio stream in input video.
+	- [ ] Vidio writer creates named pipe writer for audio pipe temp1.a after calling with subprocess: ffmpeg -i input1.flv -vn -f u16le -c:a pcm_s16le -ac 2 -ar 44100 - > temp1.a
+	- [ ] Vidio writer creates named pipe writer for video pipe temp1.a after calling with subprocess: ffmpeg -i input1.flv -an -f yuv4mpegpipe - > temp1.v
+	- [ ] Vidio writer calls subprocess of ffmpeg to read from named pipe for audio temp1.a and named pipe for video temp1.v and write to output video:
+ffmpeg -f u16le -c:a pcm_s16le -ac 2 -ar 44100 -i temp1.a \
+       -f yuv4mpegpipe -i temp1.v \
+       -y output.flv
+	- [ ] write_video_audio_frame() 
+	- [ ] Update test_copy.cpp to include this example
+
