@@ -1,0 +1,8 @@
+Named pipe output for stream 0 video and separate named pipe for stream 1 audio.  This is so that you're not reading interleaved video and audio, which is *very complicated*.
+
+Tell ffmpeg in subprocess call to output video to a named pipe and audio to another named pipe. Will need to open and listen to these named pipes.
+
+Linux first: 
+https://www.geeksforgeeks.org/named-pipe-fifo-example-c-program/
+
+Windows: create a pipe with CreateNamedPipe with PIPE_ACCESS_DUPLEX and e.g. a GUID name and create a symbolic link to this pipe in the target directory with DeviceIoControl / FSCTL_SET_REPARSE_POINT. This should be quite close to mkfifo.
