@@ -24,4 +24,13 @@ target_link_libraries(vidio_demo_play_file vidio)
 else()
 target_link_libraries(vidio_demo_play_file vidio X11 pthread)
 endif()
+
+add_library(named_pipe
+	named_pipe.hpp
+	named_pipe.cpp
+)
+target_include_directories(named_pipe INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+add_executable(test_named_pipe test_named_pipe.cpp)
+target_link_libraries(test_named_pipe named_pipe)
+
 endif()

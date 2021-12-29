@@ -1,7 +1,17 @@
 Named pipe output for stream 0 video and separate named pipe for stream 1 audio.  This is so that you're not reading interleaved video and audio, which is *very complicated*.
 
 Tell ffmpeg in subprocess call to output video to a named pipe and audio to another named pipe. Will need to open and listen to these named pipes.
+https://trac.ffmpeg.org/ticket/1663:
+mkfifo /tmp/aaa /tmp/vvv
+ffmpeg -y -i 1.flv -map 0:a -f u16le -acodec pcm_s16le -ac 2 -ar 44100 /tmp/aaa -map 0:v -f yuv4mpegpipe -vcodec rawvideo /tmp/vvv
 
+Then make 2 distinct consumer processes which consume the named pipes to confirm the separate streams are working i.e.:
+ffmpeg -y -i /tmp/aaa 1_audio.avi &
+ffmpeg -y -i /tmp/vvv 1_video.avi
+Once confirmed, for vidio, we'll be consuming one frame at a time.
+
+
+Creating named pipes with mkfifo:
 Linux first: 
 https://www.geeksforgeeks.org/named-pipe-fifo-example-c-program/
 
