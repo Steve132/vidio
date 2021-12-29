@@ -51,7 +51,6 @@ void test_reader(const std::string& filename, std::size_t bufsize = 8)
 		{
 			std::cerr << "There was an exception! " << e.what() << endl;
 		}
-		//printf("User1: %d\n", framebuf.get()[0]);
 		cout << static_cast<int>(framebuf.get()[0]) << endl;
 		if(framebuf.get()[0] == 0)
 		{

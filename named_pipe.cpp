@@ -1,9 +1,8 @@
 #include "named_pipe.hpp"
-#include <fcntl.h>
+#include <fcntl.h> // open, close, read, and write()
 #include <unistd.h>
 #include <sys/stat.h>
 #include <stdexcept>
-#include <iostream>
 #include <cerrno> // read error set by mkfifo with errno
 #include <cstring> // strerror for errno for mkfifo
 using namespace std;
@@ -43,11 +42,22 @@ public:
 		int fd = open(filename.c_str(), O_RDONLY); // | O_NONBLOCK
 		if(fd < 0)
 		{
-			throw std::runtime_error("Could not open file for reading: " + filename + ".");
+			throw std::runtime_error("Could not open file for reading: " + filename + ".  " + std::strerror(errno));
 			return false;
 		}
-		read(fd, tmpbuf, nbytes);
-		close(fd);
+		int nbytes_read = read(fd, tmpbuf, nbytes);
+		if(nbytes_read < nbytes)
+		{
+			close(fd);
+			throw std::runtime_error("Read did not fill buffer and only read " + nbytes_read + " bytes.   Expected " + nbytes + ".");
+			return false;
+		}
+		int ret = close(fd);
+		if(ret < 0)
+		{
+			throw std::runtime_error("Could not close file being read: " + filename + ".  " + std::strerror(errno));
+			return false;
+		}
 
 		return true;
 	}
@@ -97,11 +107,21 @@ public:
 		int fd = open(filename.c_str(), O_WRONLY);
 		if(fd < 0)
 		{
-			throw std::runtime_error("Could not open file for writing: " + filename + ".");
+			throw std::runtime_error("Could not open file for writing: " + filename + ".  " + std::strerror(errno));
 			return false;
 		}
-		write(fd, tmpbuf, nbytes);
-		close(fd);
+		int ret = write(fd, tmpbuf, nbytes);
+		if(ret < 0)
+		{
+			throw std::runtime_error("Could not write tmpbuf.  " + std::strerror(errno));
+			return false;
+		}
+		ret = close(fd);
+		if(ret < 0)
+		{
+			throw std::runtime_error("Could not close file being written: " + filename + ".  " + std::strerror(errno));
+			return false;
+		}
 		return true;
 	}
 };
