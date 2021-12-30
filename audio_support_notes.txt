@@ -31,8 +31,44 @@ ffmpeg -f u16le -c:a pcm_s16le -ac 2 -ar 44100 -i temp1.a \
 
 # Next Steps:
 - [ ] Audio parsing from audio-only stream i.e. ffmpeg of an mp3
-	- [ ] Parse available audio formats: parse_ffmpeg_audiofmts()
+	- [ ] Parse available audio formats: parse_ffmpeg_audiofmts() // call ffmpeg -sample_fmts and/or ffmpeg -formats
 	- [ ] Parse audio format: parse_input_audio_fmt()
+Get the audio as an .aac by itself from the video:
+ffmpeg -i test.mp4 -vn -acodec copy test.aac
+Convert the audio from .aac to .mp3:
+ffmpeg -i test.aac -vn -ac 2 test_audio.mp3
+Input #0, aac, from 'test.aac':
+  Duration: 00:00:15.17, bitrate: 342 kb/s
+    Stream #0:0: Audio: aac (LC), 48000 Hz, 5.1, fltp, 342 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (aac (native) -> mp3 (libmp3lame))
+Press [q] to stop, [?] for help
+Output #0, mp3, to 'test_audio.mp3':
+  Metadata:
+    TSSE            : Lavf58.29.100
+    Stream #0:0: Audio: mp3 (libmp3lame), 48000 Hz, stereo, fltp
+    Metadata:
+      encoder         : Lavc58.54.100 libmp3lame
+size=     212kB time=00:00:13.51 bitrate= 128.4kbits/s speed=51.3x    
+
+Reader Example in python: https://github.com/Zulko/moviepy/blob/master/moviepy/audio/io/readers.py
+nbytes = Sample Width.  Number of bytes to encode the sound: 1 for 8bit sound, 2 for 16bit, 4 for 32bit sound.
+Parse audio from line:     Stream #0:0: Audio: aac (LC), 48000 Hz, 5.1, fltp, 342 kb/s
+audio fps = 48000 Hz
+audio bitrate = 342 kb/s
+duration = 00:00:15.17 from line: Duration: 00:00:15.17, bitrate: 342 kb/s
+audio codec:  examples: 'pcm_s16le' for 16-bit wav and 'pcm_s32le' for 32-bit wav.
+        if audio_codec is None:
+            if ext in ["ogv", "webm"]:
+                audio_codec = "libvorbis"
+            else:
+                audio_codec = "libmp3lame"
+        elif audio_codec == "raw16":
+            audio_codec = "pcm_s16le"
+        elif audio_codec == "raw32":
+            audio_codec = "pcm_s32le"
+
+Writer Example in python: https://github.com/Zulko/moviepy/blob/master/moviepy/audio/io/ffmpeg_audiowriter.py
 	- [ ] read_audio_frame()
 	- [ ] Update test_playback.cpp to call read_audio_frame() from mp3
 
