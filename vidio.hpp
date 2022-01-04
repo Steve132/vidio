@@ -28,6 +28,7 @@ struct SampleFormat
 {
 	std::string codec;
 	std::string layout;
+	size_t nchannels;
 	std::string data_type;
 };
 
@@ -66,13 +67,15 @@ public:
 	Reader(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat="",const FFMPEG_Install& install=FFMPEG_Install());
 	const PixelFormat& pixelformat() const;
     const PixelFormat& native_pixelformat() const;
+	const SampleFormat& sampleformat() const;
+	unsigned int samplerate() const;
 	double framerate() const;
 	bool good() const;
 	Size video_frame_dimensions() const;
 	size_t video_frame_bufsize() const;
 	
 	bool read_video_frame(void *buf) const;
-	bool read_audio_frame(void* buf) const;
+	bool read_audio_samples(void* buf, const size_t& nsamples) const;
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
 	
 	operator bool() const

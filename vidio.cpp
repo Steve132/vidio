@@ -167,71 +167,102 @@ bool parse_ffmpeg_pixfmts(
 	return ffmpeg_proc;
 }
 
-bool parse_input_sample_fmt(
-    const std::string& ffmpeg_path,
-	vidio::SampleFormat& sample_fmt,
-	unsigned int& sample_rate)
+size_t get_nchannels(std::string& layout)
 {
+	if(layout == "mono")
+	{
+		return 1;
+	}
+	else if(layout == "stereo")
+	{
+		return 2;
+	}
+	else
+	{
+		throw std::runtime_error("Vidio: Need to parse standard ffmpeg -layouts for additional layout configurations.");
+	}
+}
+
+std::unique_ptr<Subprocess> parse_input_sample_fmt(const std::vector<std::string>& ffmpeg_input_args, const vidio::FFMPEG_Install& install, vidio::SampleFormat& parsed_sample_fmt, unsigned int& parsed_sample_rate)
+{
+	if(!install.good())
+	{
+		throw std::runtime_error("FFMPEG not found.");
+	}
+
+//	const char *const commandLine[] = {ffmpeg_path.c_str(),"-y","-hide_banner","-i","test.mp4","output.wav", 0};
+//	const char *const commandLine[] = {ffmpeg_path.c_str(),"-y","-hide_banner","-i","sine.mp3","output.wav", 0};
 	// Need to output raw audio stream:
 	//const char *const commandLine[] = {ffmpeg_path.c_str(), "-y", "-hide_banner", "-i", "sine.wav", "-f", "s16le", "-c:a", "pcm_s16le", "output.raw", 0};
-//	const char *const commandLine[] = {ffmpeg_path.c_str(),"-y","-hide_banner","-i","test.mp4","output.wav", 0};
-	const char *const commandLine[] = {ffmpeg_path.c_str(),"-y","-hide_banner","-i","sine.mp3","output.wav", 0};
 
-	try
-	{
-    	Subprocess ffproc(commandLine);
-		std::string temps, sample_codec, sample_layout, sample_data_type;
-		sample_rate = 0;
-		while(sample_rate == 0)
-		{
-			if(!getline_subprocess_stderr(ffproc,temps))
-			{
-				break; // end of err stream.
-			}
-			size_t audio_ind = temps.find("Audio: ");
-			if(audio_ind != std::string::npos)// Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 44100 Hz, mono, s16, 705 kb/s
-			{
-				size_t sample_codec_begin_ind = audio_ind + 7; // "Audio: " is 7 characters: skip the string.
-				size_t sample_codec_end_ind = temps.find(' ', sample_codec_begin_ind + 1); // Audio: pcm_s16le (...
-				if(sample_codec_end_ind != std::string::npos)
-				{
-					sample_codec = temps.substr(sample_codec_begin_ind, sample_codec_end_ind-sample_codec_begin_ind);
-				}
-				size_t hz_ind = temps.find("Hz");
-				if(hz_ind != std::string::npos)
-				{
-					size_t comma_before_hz_ind = temps.rfind(',', hz_ind) + 2; // add 2 characters for ", "
-					if(comma_before_hz_ind != std::string::npos)
-					{
-						sample_rate = static_cast<unsigned int>(stoi(temps.substr(comma_before_hz_ind, hz_ind - comma_before_hz_ind)));
-					}
-					// "Hz, " is 4 characters: skip the string to next layout param: Hz, mono, ...
-					size_t sample_layout_begin_ind = hz_ind + 4;
-					size_t sample_layout_end_ind = temps.find(',', sample_layout_begin_ind);
-					if(sample_layout_end_ind != std::string::npos)
-					{
-						sample_layout = temps.substr(sample_layout_begin_ind, sample_layout_end_ind - sample_layout_begin_ind);
-						size_t sample_data_type_begin_ind = sample_layout_end_ind + 2;
-						size_t sample_data_type_end_ind = temps.find(',', sample_data_type_begin_ind);
-						if(sample_data_type_end_ind != std::string::npos)
-						{
-							sample_data_type = temps.substr(sample_data_type_begin_ind, sample_data_type_end_ind - sample_data_type_begin_ind);
-							cout << "Input Audio Format: " << "sample codec: " << sample_codec << " sample rate: " << sample_rate << "Hz sample_layout: " << sample_layout << " sample data type: " << sample_data_type << endl;
-							sample_fmt.codec = sample_codec;
-							sample_fmt.layout = sample_layout;
-							sample_fmt.data_type = sample_data_type;
-						}
-					}
-				}
-				break;		
-			}
-		}
-		return ffproc.join()==0;
-	}
-    catch(const std::exception& e)
+	std::vector<const char*> cmdLine;
+    cmdLine.emplace_back(install.ffmpeg_path().c_str());
+    cmdLine.emplace_back("-y"); // yes to overwrite output TODO: remove
+    cmdLine.emplace_back("-hide_banner");
+    
+	for(const std::string& ia : ffmpeg_input_args)
     {
-		throw std::runtime_error((std::string("Could not parse input audio format. "))+e.what());
+        cmdLine.push_back(ia.c_str());
+    }
+	// Set codec and data type for raw output:
+    cmdLine.push_back("-f");
+    cmdLine.push_back("s16le");
+    cmdLine.push_back("-c:a");
+    cmdLine.push_back("pcm_s16le");
+    cmdLine.push_back("-");
+	cmdLine.push_back(0);
+    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
+	
+	std::string temps, sample_codec, sample_layout, sample_data_type;
+	unsigned int sample_rate = 0;
+	while(sample_rate == 0)
+	{
+		if(!getline_subprocess_stderr(*ffmpeg_proc,temps))
+		{
+			break; // end of err stream.
+		}
+
+		size_t audio_ind = temps.find("Audio: ");
+		if(audio_ind != std::string::npos)// Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 44100 Hz, mono, s16, 705 kb/s
+		{
+			size_t sample_codec_begin_ind = audio_ind + 7; // "Audio: " is 7 characters: skip the string.
+			size_t sample_codec_end_ind = temps.find(' ', sample_codec_begin_ind + 1); // Audio: pcm_s16le (...
+			if(sample_codec_end_ind != std::string::npos)
+			{
+				sample_codec = temps.substr(sample_codec_begin_ind, sample_codec_end_ind-sample_codec_begin_ind);
+			}
+			size_t hz_ind = temps.find("Hz");
+			if(hz_ind != std::string::npos)
+			{
+				size_t comma_before_hz_ind = temps.rfind(',', hz_ind) + 2; // add 2 characters for ", "
+				if(comma_before_hz_ind != std::string::npos)
+				{
+					sample_rate = static_cast<unsigned int>(stoi(temps.substr(comma_before_hz_ind, hz_ind - comma_before_hz_ind)));
+				}
+				// "Hz, " is 4 characters: skip the string to next layout param: Hz, mono, ...
+				size_t sample_layout_begin_ind = hz_ind + 4;
+				size_t sample_layout_end_ind = temps.find(',', sample_layout_begin_ind);
+				if(sample_layout_end_ind != std::string::npos)
+				{
+					sample_layout = temps.substr(sample_layout_begin_ind, sample_layout_end_ind - sample_layout_begin_ind);
+					size_t sample_data_type_begin_ind = sample_layout_end_ind + 2;
+					size_t sample_data_type_end_ind = temps.find(',', sample_data_type_begin_ind);
+					if(sample_data_type_end_ind != std::string::npos)
+					{
+						sample_data_type = temps.substr(sample_data_type_begin_ind, sample_data_type_end_ind - sample_data_type_begin_ind);
+						//cout << "Input Audio Format: " << "sample codec: " << sample_codec << " sample rate: " << sample_rate << "Hz sample_layout: " << sample_layout << " sample data type: " << sample_data_type << endl;
+						parsed_sample_fmt.codec = sample_codec;
+						parsed_sample_fmt.layout = sample_layout;
+						parsed_sample_fmt.nchannels = get_nchannels(sample_layout);
+						parsed_sample_fmt.data_type = sample_data_type;
+						parsed_sample_rate = sample_rate;
+					}
+				}
+			}
+			break;
+		}
 	}
+	return ffmpeg_proc;
 }
 
 
@@ -310,6 +341,7 @@ class Reader::Impl
 {
 public:
     std::unique_ptr<Subprocess> ffmpeg_process;
+    std::unique_ptr<Subprocess> ffmpeg_process_audio;
     Impl(const std::vector<std::string>& ffmpeg_input_args, const std::string& requested_pixelformat,const FFMPEG_Install& install)
     {
 		if(!install.good())
@@ -323,17 +355,20 @@ public:
         
         double parsed_fps = -1;
 		vidio::Size parsed_frame_dimensions;
+		vidio::SampleFormat parsed_sample_fmt;
+		unsigned int parsed_sample_rate = 0;
         try
         {
-			bool do_parse_audio = true; // TODO: detect from input file once integrated.
+			std::string input_filename_extension = ffmpeg_input_args[1].substr(ffmpeg_input_args[1].find_last_of("."));
+			bool do_parse_audio = (input_filename_extension == ".wav") || (input_filename_extension == ".mp3"); // TODO: detect from input file once integrated.
 			if(do_parse_audio)
 			{
-				vidio::SampleFormat tsample_fmt;
-				unsigned int tsample_rate;
-				parse_input_sample_fmt(install.ffmpeg_path(), tsample_fmt, tsample_rate);
+				ffmpeg_process_audio=parse_input_sample_fmt(ffmpeg_input_args, install, parsed_sample_fmt, parsed_sample_rate);
+				sample_fmt = parsed_sample_fmt;
+				sample_rate = parsed_sample_rate;
+				return;// TODO: skipping video init with audio case for now.
 			}
-
-            ffmpeg_process=parse_input_pixel_fmt(ffmpeg_input_args, actual_pixelformat, install, native_pixelformat, parsed_fps, parsed_frame_dimensions);
+			ffmpeg_process=parse_input_pixel_fmt(ffmpeg_input_args, actual_pixelformat, install, native_pixelformat, parsed_fps, parsed_frame_dimensions);
         } 
         catch(const std::exception& e)
         {
@@ -372,6 +407,8 @@ public:
 		frame_dims.width = parsed_frame_dimensions.width;
 		frame_dims.height = parsed_frame_dimensions.height;
 		fps = parsed_fps;
+		sample_fmt = parsed_sample_fmt;
+		sample_rate = parsed_sample_rate;
     }
 	~Impl()
 	{
@@ -387,6 +424,16 @@ public:
     {
         return native_fmt;
     }
+    SampleFormat sample_fmt;
+    const SampleFormat& sampleformat() const
+    {
+        return sample_fmt;
+    }
+	unsigned int sample_rate;
+	unsigned int samplerate() const
+	{
+		return sample_rate;
+	}
     double fps;
 	double framerate() const
 	{
@@ -423,9 +470,23 @@ public:
     {
         return ffmpeg_process != nullptr;
     }
-	bool read_audio_frame(void* buf) const
+	bool read_audio_samples(void* buf, const size_t& nsamples) const
 	{
-        return false;
+		size_t nchannels = sampleformat().nchannels;
+		size_t sample_data_type_nbytes = 2; // bytes per sample from data type of s16 aka depth/8 w/ffmpeg -sample_fmts
+		size_t sample_bytes_sz = sample_data_type_nbytes * nchannels;
+		size_t audio_samplebuf_bytes_sz = sample_bytes_sz * nsamples;
+		int16_t* tmpbuf = static_cast<int16_t*>(buf);
+		std::size_t res;
+		for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_bytes_sz; bytes_read += res)
+		{
+			// TODO: verify conversion / s16le reading from read_from_stdout which gets uint8_t
+			res = ffmpeg_process_audio->read_from_stdout(reinterpret_cast<char*>(tmpbuf + bytes_read), audio_samplebuf_bytes_sz - bytes_read);
+			if(res == 0)
+				return false;
+		}
+
+		return true;
     }
 };
 
@@ -449,9 +510,17 @@ const PixelFormat& Reader::native_pixelformat() const
 {
     return impl->pixelformat();
 }
+const SampleFormat& Reader::sampleformat() const
+{
+    return impl->sampleformat();
+}
 double Reader::framerate() const
 {
     return impl->framerate();
+}
+unsigned int Reader::samplerate() const
+{
+    return impl->samplerate();
 }
 bool Reader::good() const
 {
@@ -468,9 +537,9 @@ bool Reader::read_video_frame(void *buf) const
 {
     return impl->read_video_frame(buf);
 }
-bool Reader::read_audio_frame(void* buf) const
+bool Reader::read_audio_samples(void* buf, const size_t& nsamples) const
 {
-    return impl->read_audio_frame(buf);
+    return impl->read_audio_samples(buf, nsamples);
 }
 
 
