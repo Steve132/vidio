@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <cerrno> // read error set by mkfifo with errno
 #include <cstring> // strerror for errno for mkfifo
+#include <sstream> // for printing info for exceptions
 using namespace std;
 
 namespace named_pipe
@@ -49,7 +50,9 @@ public:
 		if(nbytes_read < nbytes)
 		{
 			close(fd);
-			throw std::runtime_error("Read did not fill buffer and only read " + nbytes_read + " bytes.   Expected " + nbytes + ".");
+			std::stringstream ss;
+			ss << "Read did not fill buffer and only read " << nbytes_read << " bytes.   Expected " << nbytes << ".";
+			throw std::runtime_error(ss.str());
 			return false;
 		}
 		int ret = close(fd);
@@ -113,7 +116,7 @@ public:
 		int ret = write(fd, tmpbuf, nbytes);
 		if(ret < 0)
 		{
-			throw std::runtime_error("Could not write tmpbuf.  " + std::strerror(errno));
+			throw std::runtime_error("Could not write tmpbuf.  " + std::string(std::strerror(errno)));
 			return false;
 		}
 		ret = close(fd);
