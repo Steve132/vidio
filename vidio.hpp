@@ -24,6 +24,13 @@ struct PixelFormat
     unsigned bits_per_pixel;
 };
 
+struct SampleFormat
+{
+	std::string codec;
+	std::string layout;
+	std::string data_type;
+};
+
 class Reader;
 class Writer;
 struct FFMPEG_Install
