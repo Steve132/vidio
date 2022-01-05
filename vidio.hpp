@@ -96,20 +96,24 @@ public:
 	Writer(const std::string& filename,
 		const Size& size,
 		double framerate,
-		const std::string& fmt="rgb24",
+		const std::string& pixelfmt="rgb24",
 		const std::string& encode_ffmpeg_params="",
 		const FFMPEG_Install& install=FFMPEG_Install());
 
-	
+	const SampleFormat& sampleformat() const;
+	unsigned int samplerate() const;
+
 	//buf is a buffer with frame_size_bytes*num_frames bytes of memory
 	bool write_video_frame(const void* buf) const;
-	bool write_audio_frame(const void* buf) const;
+	bool write_audio_samples(const void* buf, const size_t& nsamples) const;
     bool good() const;
 
 	operator bool() const
 	{
 		return good();
 	}
+
+	~Writer();
 };
 
 }

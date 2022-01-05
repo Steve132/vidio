@@ -265,7 +265,6 @@ std::unique_ptr<Subprocess> parse_input_sample_fmt(const std::vector<std::string
 	return ffmpeg_proc;
 }
 
-
 namespace vidio
 {
 
@@ -480,7 +479,6 @@ public:
 		std::size_t res;
 		for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_bytes_sz; bytes_read += res)
 		{
-			// TODO: verify conversion / s16le reading from read_from_stdout which gets uint8_t
 			res = ffmpeg_process_audio->read_from_stdout(reinterpret_cast<char*>(tmpbuf + bytes_read), audio_samplebuf_bytes_sz - bytes_read);
 			if(res == 0)
 				return false;
@@ -542,27 +540,142 @@ bool Reader::read_audio_samples(void* buf, const size_t& nsamples) const
     return impl->read_audio_samples(buf, nsamples);
 }
 
+std::unique_ptr<Subprocess> start_ffmpeg_output_audio(const std::vector<std::string>& encode_ffmpeg_params, const vidio::FFMPEG_Install& install, const vidio::SampleFormat& sample_fmt, const unsigned int& sample_rate, const std::string& filename)
+{
+	if(!install.good())
+	{
+		throw std::runtime_error("FFMPEG not found.");
+	}
 
+	// raw format output
+	//const char *const commandLine[] = {ffmpeg_path.c_str(), "-y", "-hide_banner", "-i", "-", "-f", "s16le", "-c:a", "pcm_s16le", "output.raw", 0};
 
-
-
-
-
-
-
-
-
-
-
-
-
+	std::vector<const char*> cmdLine;
+    cmdLine.emplace_back(install.ffmpeg_path().c_str());
+    cmdLine.emplace_back("-y"); // yes to overwrite output TODO: remove
+    cmdLine.emplace_back("-hide_banner");
+    
+	for(const std::string& ia : encode_ffmpeg_params)
+    {
+        cmdLine.push_back(ia.c_str());
+    }
+	// Set codec and data type for raw output:
+	cmdLine.push_back("-i");
+	cmdLine.push_back("-"); // equivalent arg to "-" is "pipe:" // read from stdin, where we're writing to.
+    cmdLine.push_back("-f");
+    cmdLine.push_back(sample_fmt.data_type.c_str());
+    cmdLine.push_back("-c:a");
+    cmdLine.push_back(sample_fmt.codec.c_str());
+	cmdLine.push_back("-ar");
+	std::stringstream ss;
+	ss << sample_rate;
+	cmdLine.push_back(ss.str().c_str());
+	cmdLine.push_back(filename.c_str());
+	cmdLine.push_back(0);
+    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
+	return ffmpeg_proc;
+}
 
 class Writer::Impl
 {
 public:
+    std::unique_ptr<Subprocess> ffmpeg_process_audio;
+    Impl(const std::vector<std::string>& encode_ffmpeg_args, const Size& size, double framerate, const std::string& pixelfmt="rgb24", const FFMPEG_Install& install=FFMPEG_Install(), const std::string& filename="")
+    {
+		// Raw audio defaults:
+		vidio::SampleFormat requested_sample_fmt;
+		requested_sample_fmt.layout = "mono";
+		requested_sample_fmt.codec = "pcm_s16le";
+		requested_sample_fmt.nchannels = 1;
+		requested_sample_fmt.data_type = "s16le";
+		unsigned int requested_sample_rate = 44100;
+		sample_fmt = requested_sample_fmt;
+		sample_rate = requested_sample_rate;
+		if(!install.good())
+		{
+			throw std::runtime_error("FFMPEG Installation not found.");
+		}
 
+		try
+		{
+			std::string output_filename_extension = filename.substr(filename.find_last_of("."));
+			bool do_write_audio = (output_filename_extension == ".wav") || (output_filename_extension == ".mp3"); // TODO: detect from input file once integrated.
+			if(do_write_audio)
+			{
+				ffmpeg_process_audio=start_ffmpeg_output_audio(encode_ffmpeg_args, install, requested_sample_fmt, requested_sample_rate, filename);
+
+				return;// TODO: skipping video init with audio case for now.
+			}
+        } 
+        catch(const std::exception& e)
+        {
+			throw std::runtime_error((std::string("Could not open for writing."))+e.what());
+		}
+    }
+	~Impl()
+	{
+		if(good())
+		{
+			ffmpeg_process_audio->join();
+		}
+	}
+
+    SampleFormat sample_fmt;
+    const SampleFormat& sampleformat() const
+    {
+        return sample_fmt;
+    }
+	unsigned int sample_rate;
+	unsigned int samplerate() const
+	{
+		return sample_rate;
+	}
+    bool good() const
+    {
+        return ffmpeg_process_audio != nullptr;
+    }
+	bool write_audio_samples(const void* buf, const size_t& nsamples) const
+	{
+		size_t nchannels = sampleformat().nchannels;
+		size_t audio_samplebuf_size = nsamples * nchannels;
+		int16_t* tmpbuf = static_cast<int16_t*>(const_cast<void *>(buf));
+		std::size_t res;
+
+		// Write to stdin since ffmpeg_process_audio is listening on stdin with -i pipe:
+		for(std::size_t sample_ind = 0; sample_ind < audio_samplebuf_size; sample_ind++)
+		{
+			cin >> tmpbuf[sample_ind];
+		}
+
+		return true;
+    }
 };
 
+Writer::Writer(const std::string& filename,
+		const Size& size,
+		double framerate,
+		const std::string& pixelfmt,
+		const std::string& encode_ffmpeg_params,
+		const FFMPEG_Install& install):
+	impl(std::make_shared<Writer::Impl>(std::vector<std::string>{encode_ffmpeg_params},size,framerate,pixelfmt,install,filename))
+{
+}
 
+Writer::~Writer()
+{}
+
+const SampleFormat& Writer::sampleformat() const
+{
+    return impl->sampleformat();
+}
+unsigned int Writer::samplerate() const
+{
+    return impl->samplerate();
+}
+
+bool Writer::write_audio_samples(const void* buf, const size_t& nsamples) const
+{
+	return impl->write_audio_samples(buf, nsamples);
+}
 
 }

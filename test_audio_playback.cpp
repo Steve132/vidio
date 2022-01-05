@@ -22,7 +22,7 @@ s64      64
 s64p     64 
 */
 
-int main(int argc,char** argv)
+void reader_test()
 {
 	vidio::Reader reader("sine.wav");
 	unsigned int sample_rate = reader.samplerate();
@@ -30,7 +30,7 @@ int main(int argc,char** argv)
 	cout << "sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
 
 	float nseconds = .001;
-	size_t nsamples = 100;//sample_rate * nseconds;
+	size_t nsamples = 10;//sample_rate * nseconds;
 
 	// create buffer for samples with parsed data type
 	// TODO: template for read_audio_samples on data type and to map ffmpeg -sample_fmts to unique_ptr samplesbuf allocation.
@@ -51,7 +51,28 @@ int main(int argc,char** argv)
 		int16_t sample = (int16_t)samplesbuf[sample_ind];
 		cout << "SAMPLE: " << sample << endl;
 	}
+}
 
+void writer_test()
+{
+	// first 10 samples of sine.wav
+	size_t nsamples = 10;
+	int16_t samplesbuf[nsamples] = {191,1505,3141,4600,6051,7650,9167,10526,11898,13294};
 
+	vidio::Size empty_size;
+	empty_size.width=0;
+	empty_size.height=0;
+	vidio::Writer writer("sine.raw",empty_size,0);
+	unsigned int sample_rate = writer.samplerate();
+	vidio::SampleFormat sample_fmt = writer.sampleformat();
+	cout << "Writer sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
+
+	writer.write_audio_samples(samplesbuf, nsamples);
+}
+
+int main(int argc,char** argv)
+{
+	//reader_test();
+	writer_test();
 	return 0;
 }
