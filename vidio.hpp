@@ -74,9 +74,9 @@ public:
 	Size video_frame_dimensions() const;
 	size_t video_frame_bufsize() const;
 	
+	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
 	bool read_video_frame(void *buf) const;
 	bool read_audio_samples(void* buf, const size_t& nsamples) const;
-	//buf is a buffer with frame_size_bytes*num_frames bytes of memory.
 	
 	operator bool() const
 	{
