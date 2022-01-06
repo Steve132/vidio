@@ -167,7 +167,7 @@ bool parse_ffmpeg_pixfmts(
 	return ffmpeg_proc;
 }
 
-size_t get_nchannels(std::string& layout)
+static size_t get_nchannels(std::string& layout)
 {
 	if(layout == "mono")
 	{
@@ -251,10 +251,7 @@ std::unique_ptr<Subprocess> parse_input_sample_fmt(const std::vector<std::string
 					{
 						sample_data_type = temps.substr(sample_data_type_begin_ind, sample_data_type_end_ind - sample_data_type_begin_ind);
 						//cout << "Input Audio Format: " << "sample codec: " << sample_codec << " sample rate: " << sample_rate << "Hz sample_layout: " << sample_layout << " sample data type: " << sample_data_type << endl;
-						parsed_sample_fmt.codec = sample_codec;
-						parsed_sample_fmt.layout = sample_layout;
-						parsed_sample_fmt.nchannels = get_nchannels(sample_layout);
-						parsed_sample_fmt.data_type = sample_data_type;
+						parsed_sample_fmt = vidio::SampleFormat(sample_codec, sample_layout, get_nchannels(sample_layout), sample_data_type);
 						parsed_sample_rate = sample_rate;
 					}
 				}
@@ -332,7 +329,6 @@ FFMPEG_Install::FFMPEG_Install(const std::vector<std::string>& additional_search
 
 FFMPEG_Install::~FFMPEG_Install()
 {}
-
 
 //eventually use HW formats. https://www.ffmpeg.org/doxygen/2.5/pixfmt_8h.html#a9a8e335cf3be472042bc9f0cf80cd4c5
 
@@ -458,7 +454,7 @@ public:
 		std::size_t res;
 		for(std::size_t bytes_read = 0; bytes_read < video_framebuf_sz; bytes_read += res)
 		{
-			res = ffmpeg_process->read_from_stdout(reinterpret_cast<char*>(tmpbuf + bytes_read), video_framebuf_sz - bytes_read);
+			res = ffmpeg_process->read_from_stdout(reinterpret_cast<char*>(tmpbuf) + bytes_read, video_framebuf_sz - bytes_read);
 			if(res == 0)
 				return false;
 		}
@@ -470,46 +466,22 @@ public:
         return ffmpeg_process != nullptr;
     }
 
-	template<class T>
-	bool read_audio_samples_(void* buf, const size_t& nsamples) const
+	bool read_audio_samples(void* buf, const size_t& nsamples) const
 	{
-		const size_t sample_data_type_nbytes = sizeof(T); // bytes per sample from data type of s16 aka depth/8 w/ffmpeg -sample_fmts
-		const size_t sample_bytes_sz = sample_data_type_nbytes * sample_fmt.nchannels;
+		const size_t sample_bytes_sz = sample_fmt.nbytes * sample_fmt.nchannels;
 		const size_t audio_samplebuf_bytes_sz = sample_bytes_sz * nsamples;
-		T* tmpbuf = static_cast<T*>(buf);
+		uint8_t* tmpbuf = static_cast<uint8_t*>(buf);
 		std::size_t res;
 		for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_bytes_sz; bytes_read += res)
 		{
-			res = ffmpeg_process_audio->read_from_stdout(reinterpret_cast<char*>(tmpbuf + bytes_read), audio_samplebuf_bytes_sz - bytes_read);
+			res = ffmpeg_process_audio->read_from_stdout(reinterpret_cast<char*>(tmpbuf) + bytes_read, audio_samplebuf_bytes_sz - bytes_read);
 			if(res == 0)
 				return false;
 		}
 
 		return true;
     }
-
-	bool read_audio_samples(void* buf, const size_t& nsamples) const
-	{
-		//From ffmpeg -sample_fmts:
-		if(sample_fmt.data_type == "u8" || sample_fmt.data_type == "u8p")
-			return read_audio_samples_<uint8_t>(buf, nsamples);
-		else if(sample_fmt.data_type == "s16" || sample_fmt.data_type == "s16p")
-			return read_audio_samples_<int16_t>(buf, nsamples);
-		else if(sample_fmt.data_type == "s32" || sample_fmt.data_type == "s32p")
-			return read_audio_samples_<int32_t>(buf, nsamples);
-		else if(sample_fmt.data_type == "flt" || sample_fmt.data_type == "fltp")
-			return read_audio_samples_<float>(buf, nsamples);
-		else if(sample_fmt.data_type == "dbl" || sample_fmt.data_type == "dblp")
-			return read_audio_samples_<double>(buf, nsamples);
-		else if(sample_fmt.data_type == "s64" || sample_fmt.data_type == "s64p")
-			return read_audio_samples_<int64_t>(buf, nsamples);
-		else
-			throw std::runtime_error("Vidio: invalid sample fmt.  Must be valid from ffmpeg -sample_fmts.");
-	}
 };
-
-
-
 
 Reader::Reader(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat,const FFMPEG_Install& install):
     impl(std::make_shared<Reader::Impl>(ffmpeg_input_args,pixelformat,install))
@@ -592,7 +564,7 @@ std::unique_ptr<Subprocess> start_ffmpeg_output_audio(const std::vector<std::str
 	cmdLine.push_back(ss.str().c_str());
 	cmdLine.push_back(filename.c_str());
 	cmdLine.push_back(0);
-    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data());
+    std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data(), Subprocess::JOIN);
 	return ffmpeg_proc;
 }
 
@@ -603,11 +575,7 @@ public:
     Impl(const std::vector<std::string>& encode_ffmpeg_args, const Size& size, double framerate, const std::string& pixelfmt="rgb24", const FFMPEG_Install& install=FFMPEG_Install(), const std::string& filename="")
     {
 		// Raw audio defaults:
-		vidio::SampleFormat requested_sample_fmt;
-		requested_sample_fmt.layout = "mono";
-		requested_sample_fmt.codec = "pcm_s16le";
-		requested_sample_fmt.nchannels = 1;
-		requested_sample_fmt.data_type = "s16le";
+		SampleFormat requested_sample_fmt("pcm_s16le", "mono", 1, "s16le");
 		unsigned int requested_sample_rate = 44100;
 		sample_fmt = requested_sample_fmt;
 		sample_rate = requested_sample_rate;
@@ -634,10 +602,6 @@ public:
     }
 	~Impl()
 	{
-		if(good())
-		{
-			ffmpeg_process_audio->join();
-		}
 	}
 
     SampleFormat sample_fmt;
@@ -654,19 +618,19 @@ public:
     {
         return ffmpeg_process_audio != nullptr;
     }
+
 	bool write_audio_samples(const void* buf, const size_t& nsamples) const
 	{
 		size_t nchannels = sampleformat().nchannels;
-		size_t audio_samplebuf_size = nsamples * nchannels;
-		int16_t* tmpbuf = static_cast<int16_t*>(const_cast<void *>(buf));
+		size_t audio_samplebuf_size = sampleformat().nbytes * nsamples * nchannels;
+		const uint8_t* tmpbuf = static_cast<const uint8_t*>(buf);
 		std::size_t res;
-
-		// Write to stdin since ffmpeg_process_audio is listening on stdin with -i pipe:
-		for(std::size_t sample_ind = 0; sample_ind < audio_samplebuf_size; sample_ind++)
+		for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_size; bytes_read += res)
 		{
-			cin >> tmpbuf[sample_ind];
+			res = ffmpeg_process_audio->write_to_stdin(reinterpret_cast<const char*>(tmpbuf + bytes_read), audio_samplebuf_size - bytes_read);
+			if(res == 0)
+				return false;
 		}
-
 		return true;
     }
 };

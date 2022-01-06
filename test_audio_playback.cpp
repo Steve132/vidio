@@ -68,7 +68,7 @@ void writer_test()
 	vidio::SampleFormat sample_fmt = writer.sampleformat();
 	cout << "Writer sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
 
-	writer.write_audio_samples(samplesbuf, nsamples);
+	//writer.write_audio_samples(samplesbuf, nsamples);
 }
 
 int main(int argc,char** argv)
