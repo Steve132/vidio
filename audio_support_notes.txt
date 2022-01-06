@@ -192,3 +192,19 @@ s64p     64
 
 
 
+<<<<<<< HEAD
+=======
+/*Advanced Audio options:
+-atag fourcc/tag    force audio tag/fourcc
+-sample_fmt format  set sample format
+-channel_layout layout  set channel layout
+-guess_layout_max   set the maximum number of channels to try to guess the channel layout
+-absf audio bitstream_filters  deprecated
+-apre preset        set the audio options to the indicated preset
+
+
+
+*/
+
+https://gcc.gnu.org/onlinedocs/gcc-4.6.2/libstdc++/api/a00069.html
+>>>>>>> master
