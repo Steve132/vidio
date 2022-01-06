@@ -190,10 +190,6 @@ dblp     64
 s64      64 
 s64p     64 
 
-
-
-<<<<<<< HEAD
-=======
 /*Advanced Audio options:
 -atag fourcc/tag    force audio tag/fourcc
 -sample_fmt format  set sample format
@@ -207,4 +203,3 @@ s64p     64
 */
 
 https://gcc.gnu.org/onlinedocs/gcc-4.6.2/libstdc++/api/a00069.html
->>>>>>> master

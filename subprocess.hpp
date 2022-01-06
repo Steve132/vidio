@@ -3,6 +3,7 @@
 
 #include "subprocess.h"
 #include <stdexcept>
+#include <cstdio>
 
 struct Subprocess
 {
@@ -26,6 +27,11 @@ public:
         }
         this->input=subprocess_stdin(&process);
     }
+	unsigned int write_to_stdin(const char* buf,unsigned int n)
+	{
+		FILE* inp=subprocess_stdin(&process);
+		return (unsigned int)fwrite(buf, n,1,inp);
+	}
     
     unsigned int read_from_stdout(char* buf,unsigned int n)
     {
