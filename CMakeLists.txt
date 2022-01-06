@@ -4,6 +4,7 @@ project(vidio)
 add_library(vidio 
 	vidio.hpp
 	vidio.cpp
+#	prototype_config_api.cpp
 )
 target_include_directories(vidio INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 #add_executable(test_copy test_copy.cpp)
