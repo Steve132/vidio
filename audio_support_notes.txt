@@ -192,12 +192,3 @@ s64p     64
 
 
 
-/*Advanced Audio options:
--atag fourcc/tag    force audio tag/fourcc
--sample_fmt format  set sample format
--channel_layout layout  set channel layout
--guess_layout_max   set the maximum number of channels to try to guess the channel layout
--absf audio bitstream_filters  deprecated
--apre preset        set the audio options to the indicated preset
-
-*/
