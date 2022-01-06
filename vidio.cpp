@@ -483,6 +483,31 @@ public:
     }
 };
 
+std::size_t SampleFormat::get_sample_nbytes(const std::string& sample_data_type) const
+{
+	std::string _data_type = sample_data_type;
+	// Remove endianness from data type number of bytes calculation:
+	if((sample_data_type.find("le") != std::string::npos) || (sample_data_type.find("be") != std::string::npos))
+	{
+		_data_type = sample_data_type.substr(0,sample_data_type.size() - 2);
+	}
+
+	if(_data_type == "u8" || _data_type == "u8p")
+		return sizeof(uint8_t);
+	else if(_data_type == "s16" || _data_type == "s16p")
+		return sizeof(int16_t);
+	else if(_data_type == "s32" || _data_type == "s32p")
+		return sizeof(int32_t);
+	else if(_data_type == "flt" || _data_type == "fltp")
+		return sizeof(float);
+	else if(_data_type == "dbl" || _data_type == "dblp")
+		return sizeof(double);
+	else if(_data_type == "s64" || _data_type == "s64p")
+		return sizeof(int64_t);
+	else
+		throw std::runtime_error("Vidio: invalid sample fmt.  Must be valid from ffmpeg -sample_fmts.");
+}
+
 Reader::Reader(const std::vector<std::string>& ffmpeg_input_args,const std::string& pixelformat,const FFMPEG_Install& install):
     impl(std::make_shared<Reader::Impl>(ffmpeg_input_args,pixelformat,install))
 {}
