@@ -469,13 +469,14 @@ public:
     {
         return ffmpeg_process != nullptr;
     }
-	bool read_audio_samples(void* buf, const size_t& nsamples) const
+
+	template<class T>
+	bool read_audio_samples_(void* buf, const size_t& nsamples) const
 	{
-		size_t nchannels = sampleformat().nchannels;
-		size_t sample_data_type_nbytes = 2; // bytes per sample from data type of s16 aka depth/8 w/ffmpeg -sample_fmts
-		size_t sample_bytes_sz = sample_data_type_nbytes * nchannels;
-		size_t audio_samplebuf_bytes_sz = sample_bytes_sz * nsamples;
-		int16_t* tmpbuf = static_cast<int16_t*>(buf);
+		const size_t sample_data_type_nbytes = sizeof(T); // bytes per sample from data type of s16 aka depth/8 w/ffmpeg -sample_fmts
+		const size_t sample_bytes_sz = sample_data_type_nbytes * sample_fmt.nchannels;
+		const size_t audio_samplebuf_bytes_sz = sample_bytes_sz * nsamples;
+		T* tmpbuf = static_cast<T*>(buf);
 		std::size_t res;
 		for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_bytes_sz; bytes_read += res)
 		{
@@ -486,6 +487,25 @@ public:
 
 		return true;
     }
+
+	bool read_audio_samples(void* buf, const size_t& nsamples) const
+	{
+		//From ffmpeg -sample_fmts:
+		if(sample_fmt.data_type == "u8" || sample_fmt.data_type == "u8p")
+			return read_audio_samples_<uint8_t>(buf, nsamples);
+		else if(sample_fmt.data_type == "s16" || sample_fmt.data_type == "s16p")
+			return read_audio_samples_<int16_t>(buf, nsamples);
+		else if(sample_fmt.data_type == "s32" || sample_fmt.data_type == "s32p")
+			return read_audio_samples_<int32_t>(buf, nsamples);
+		else if(sample_fmt.data_type == "flt" || sample_fmt.data_type == "fltp")
+			return read_audio_samples_<float>(buf, nsamples);
+		else if(sample_fmt.data_type == "dbl" || sample_fmt.data_type == "dblp")
+			return read_audio_samples_<double>(buf, nsamples);
+		else if(sample_fmt.data_type == "s64" || sample_fmt.data_type == "s64p")
+			return read_audio_samples_<int64_t>(buf, nsamples);
+		else
+			throw std::runtime_error("Vidio: invalid sample fmt.  Must be valid from ffmpeg -sample_fmts.");
+	}
 };
 
 

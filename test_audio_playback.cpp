@@ -5,22 +5,42 @@
 #include "vidio.hpp"
 using namespace std;
 
-/*
-Need to STORE standard ffmpeg -sample_fmts in code:
-name   depth
-u8        8 
-s16      16 
-s32      32 
-flt      32 
-dbl      64 
-u8p       8 
-s16p     16 
-s32p     32 
-fltp     32 
-dblp     64 
-s64      64 
-s64p     64 
-*/
+template<class T>
+void read_samples_(vidio::Reader& reader, const size_t& nsamples)
+{
+	vidio::SampleFormat sample_fmt = reader.sampleformat();
+	size_t bps = sizeof(T); // bytes per sample from data type of s16
+	size_t sample_bytes_sz = bps * sample_fmt.nchannels;
+	size_t audio_samplebuf_bytes_sz = sample_bytes_sz * nsamples;
+	std::unique_ptr<T[]> samplesbuf(new T[sample_fmt.nchannels * nsamples]);
+	reader.read_audio_samples(samplesbuf.get(), nsamples);
+
+	for(size_t sample_ind = 0; sample_ind < nsamples; sample_ind++)
+	{
+		T sample = (T)samplesbuf[sample_ind];
+		cout << "SAMPLE: " << sample << endl;
+	}
+}
+
+void read_samples(vidio::Reader& reader, const size_t& nsamples)
+{
+	vidio::SampleFormat sample_fmt = reader.sampleformat();
+	//From ffmpeg -sample_fmts:
+	if(sample_fmt.data_type == "u8" || sample_fmt.data_type == "u8p")
+		read_samples_<uint8_t>(reader, nsamples);
+	else if(sample_fmt.data_type == "s16" || sample_fmt.data_type == "s16p")
+		read_samples_<int16_t>(reader, nsamples);
+	else if(sample_fmt.data_type == "s32" || sample_fmt.data_type == "s32p")
+		read_samples_<int32_t>(reader, nsamples);
+	else if(sample_fmt.data_type == "flt" || sample_fmt.data_type == "fltp")
+		read_samples_<float>(reader, nsamples);
+	else if(sample_fmt.data_type == "dbl" || sample_fmt.data_type == "dblp")
+		read_samples_<double>(reader, nsamples);
+	else if(sample_fmt.data_type == "s64" || sample_fmt.data_type == "s64p")
+		read_samples_<int64_t>(reader, nsamples);
+	else
+		throw std::runtime_error("Vidio: invalid sample fmt.  Must be valid from ffmpeg -sample_fmts.");
+}
 
 void reader_test()
 {
@@ -31,26 +51,7 @@ void reader_test()
 
 	float nseconds = .001;
 	size_t nsamples = 10;//sample_rate * nseconds;
-
-	// create buffer for samples with parsed data type
-	// TODO: template for read_audio_samples on data type and to map ffmpeg -sample_fmts to unique_ptr samplesbuf allocation.
-	if(sample_fmt.data_type != "s16")
-	{
-		throw std::runtime_error("Vidio: only valid input audio sample data type is s16.");
-	}
-	size_t bps = 2; // bytes per sample from data type of s16
-	size_t sample_bytes_sz = bps * sample_fmt.nchannels;
-	size_t audio_samplebuf_bytes_sz = sample_bytes_sz * nsamples;
-
-
-	std::unique_ptr<int16_t[]> samplesbuf(new int16_t[sample_fmt.nchannels * nsamples]);
-	reader.read_audio_samples(samplesbuf.get(), nsamples);
-
-	for(size_t sample_ind = 0; sample_ind < nsamples; sample_ind++)
-	{
-		int16_t sample = (int16_t)samplesbuf[sample_ind];
-		cout << "SAMPLE: " << sample << endl;
-	}
+	read_samples(reader, nsamples);
 }
 
 void writer_test()
@@ -72,7 +73,7 @@ void writer_test()
 
 int main(int argc,char** argv)
 {
-	//reader_test();
-	writer_test();
+	reader_test();
+	//writer_test();
 	return 0;
 }
