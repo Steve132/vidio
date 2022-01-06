@@ -26,6 +26,10 @@ public:
         }
         this->input=subprocess_stdin(&process);
     }
+	unsigned int write_to_stdin(char* buf,unsigned int n)
+	{
+
+	}
     
     unsigned int read_from_stdout(char* buf,unsigned int n)
     {
