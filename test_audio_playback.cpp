@@ -3,6 +3,15 @@
 #include<exception>
 #include<vector>
 #include "vidio.hpp"
+#include "subprocess.hpp"
+
+// mkfifo stuff:
+#include <unistd.h>
+#include <sys/stat.h>
+#include <stdexcept>
+#include <cerrno> // read error set by mkfifo with errno
+#include <cstring> // strerror for errno for mkfifo
+
 using namespace std;
 
 template<class T>
@@ -68,12 +77,51 @@ void writer_test()
 	vidio::SampleFormat sample_fmt = writer.sampleformat();
 	cout << "Writer sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
 
-	//writer.write_audio_samples(samplesbuf, nsamples);
+	if(writer.write_audio_samples(samplesbuf, nsamples))
+	{
+		std::cout << "wrote audio samples." << std::endl;
+	}
+}
+
+// Isolate test away from Vidio::Writer class to simply Subprocess:
+bool write_audio_samples(std::unique_ptr<Subprocess>& ffmpeg_process_audio, const void* buf, const size_t& nsamples)
+{
+	size_t nchannels = 1;//sampleformat().nchannels;
+	size_t nbytes = 2;
+	size_t audio_samplebuf_size = nbytes * nsamples * nchannels;
+	const uint8_t* tmpbuf = static_cast<const uint8_t*>(buf);
+	std::size_t res;
+	for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_size; bytes_read += res)
+	{
+		std::cout << "Writing bytes." << std::endl;
+		res = ffmpeg_process_audio->write_to_stdin(reinterpret_cast<const char*>(tmpbuf + bytes_read), audio_samplebuf_size - bytes_read);
+		if(res == 0)
+			return false;
+	}
+	return true;
+}
+
+bool write_test(const std::string& filename = "output.wav")
+{
+	// first 10 samples of sine.wav
+	size_t nsamples = 10;
+	int16_t samplesbuf[nsamples] = {191,1505,3141,4600,6051,7650,9167,10526,11898,13294};
+	const char *const commandLine[] = {"/usr/bin/ffmpeg", "-hide_banner", "-y", "-i", "pipe:0", "-f", "s16le", "-c:a", "pcm_s16le", filename.c_str(), 0};
+	std::unique_ptr<Subprocess> ffmpeg_process_audio=std::make_unique<Subprocess>(commandLine, Subprocess::JOIN);
+	if(ffmpeg_process_audio == nullptr)
+	{
+		std::cout << "Could not create ffmpeg audio process!" << std::endl;
+		return false;
+	}
+	std::cout << "calling write audio samples" << std::endl;
+	bool retval = write_audio_samples(ffmpeg_process_audio, samplesbuf, nsamples);
+	return retval;
 }
 
 int main(int argc,char** argv)
 {
-	reader_test();
+	//reader_test();
 	//writer_test();
+	write_test();
 	return 0;
 }
