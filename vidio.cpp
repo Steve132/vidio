@@ -564,21 +564,18 @@ std::unique_ptr<Subprocess> start_ffmpeg_output_audio(const std::vector<std::str
 		throw std::runtime_error("FFMPEG not found.");
 	}
 
-	// raw format output
-	//const char *const commandLine[] = {ffmpeg_path.c_str(), "-y", "-hide_banner", "-i", "-", "-f", "s16le", "-c:a", "pcm_s16le", "output.raw", 0};
-
 	std::vector<const char*> cmdLine;
     cmdLine.emplace_back(install.ffmpeg_path().c_str());
-    cmdLine.emplace_back("-y"); // yes to overwrite output TODO: remove
     cmdLine.emplace_back("-hide_banner");
-    
-	for(const std::string& ia : encode_ffmpeg_params)
-    {
-        cmdLine.push_back(ia.c_str());
-    }
+    cmdLine.emplace_back("-y"); // yes to overwrite output TODO: remove
+	if(!((encode_ffmpeg_params.size() == 1) && (encode_ffmpeg_params[0] == "")))
+	{
+		for(const std::string& ia : encode_ffmpeg_params)
+		{
+		    cmdLine.push_back(ia.c_str());
+		}
+	}
 	// Set codec and data type for raw output:
-	cmdLine.push_back("-i");
-	cmdLine.push_back("-"); // equivalent arg to "-" is "pipe:" // read from stdin, where we're writing to.
     cmdLine.push_back("-f");
     cmdLine.push_back(sample_fmt.data_type.c_str());
     cmdLine.push_back("-c:a");
@@ -587,6 +584,8 @@ std::unique_ptr<Subprocess> start_ffmpeg_output_audio(const std::vector<std::str
 	std::stringstream ss;
 	ss << sample_rate;
 	cmdLine.push_back(ss.str().c_str());
+	cmdLine.push_back("-i");
+	cmdLine.push_back("-"); // equivalent arg to "-" is "pipe:" // read from stdin, where we're writing to.
 	cmdLine.push_back(filename.c_str());
 	cmdLine.push_back(0);
     std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data(), Subprocess::JOIN);
@@ -616,8 +615,10 @@ public:
 			if(do_write_audio)
 			{
 				ffmpeg_process_audio=start_ffmpeg_output_audio(encode_ffmpeg_args, install, requested_sample_fmt, requested_sample_rate, filename);
-
-				return;// TODO: skipping video init with audio case for now.
+				if(ffmpeg_process_audio == nullptr)
+				{
+					throw std::runtime_error("Error starting audio writer.");
+				}
 			}
         } 
         catch(const std::exception& e)
@@ -627,6 +628,10 @@ public:
     }
 	~Impl()
 	{
+		if((ffmpeg_process_audio != nullptr) && (ffmpeg_process_audio->input != nullptr))
+		{
+			fflush(ffmpeg_process_audio->input);
+		}
 	}
 
     SampleFormat sample_fmt;
@@ -653,6 +658,7 @@ public:
 		for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_size; bytes_read += res)
 		{
 			res = ffmpeg_process_audio->write_to_stdin(reinterpret_cast<const char*>(tmpbuf + bytes_read), audio_samplebuf_size - bytes_read);
+			fflush(ffmpeg_process_audio->input);
 			if(res == 0)
 				return false;
 		}

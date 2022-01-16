@@ -15,7 +15,7 @@
 using namespace std;
 
 template<class T>
-void read_samples_(vidio::Reader& reader, const size_t& nsamples)
+std::unique_ptr<T[]> read_samples_(vidio::Reader& reader, const size_t& nsamples)
 {
 	vidio::SampleFormat sample_fmt = reader.sampleformat();
 	size_t bps = sizeof(T); // bytes per sample from data type of s16
@@ -27,8 +27,9 @@ void read_samples_(vidio::Reader& reader, const size_t& nsamples)
 	for(size_t sample_ind = 0; sample_ind < nsamples; sample_ind++)
 	{
 		T sample = (T)samplesbuf[sample_ind];
-		cout << "SAMPLE: " << sample << endl;
+		cout << "Read Sample: " << sample << endl;
 	}
+	return samplesbuf;
 }
 
 void read_samples(vidio::Reader& reader, const size_t& nsamples)
@@ -51,77 +52,57 @@ void read_samples(vidio::Reader& reader, const size_t& nsamples)
 		throw std::runtime_error("Vidio: invalid sample fmt.  Must be valid from ffmpeg -sample_fmts.");
 }
 
-void reader_test()
+std::unique_ptr<int16_t[]> reader_test(const size_t& nsamples, const std::string& filename = "output.wav")
 {
-	vidio::Reader reader("sine.wav");
+	vidio::Reader reader(filename);
 	unsigned int sample_rate = reader.samplerate();
 	vidio::SampleFormat sample_fmt = reader.sampleformat();
-	cout << "sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
+	cout << "Reader sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
+	cout << "Reading audio samples from " << filename << "." << std::endl;
 
-	float nseconds = .001;
-	size_t nsamples = 10;//sample_rate * nseconds;
-	read_samples(reader, nsamples);
+	float nseconds = .001;//nsamples = sample_rate * nseconds;
+	//read_samples(reader, nsamples); // generic for type
+	return read_samples_<int16_t>(reader, nsamples); // for our verification test
 }
 
-void writer_test()
+void writer_test(int16_t* samplesbuf, const size_t& nsamples, const std::string& filename = "output.wav")
 {
-	// first 10 samples of sine.wav
-	size_t nsamples = 10;
-	int16_t samplesbuf[nsamples] = {191,1505,3141,4600,6051,7650,9167,10526,11898,13294};
-
 	vidio::Size empty_size;
 	empty_size.width=0;
 	empty_size.height=0;
-	vidio::Writer writer("sine.raw",empty_size,0);
+	vidio::Writer writer(filename,empty_size,0);
 	unsigned int sample_rate = writer.samplerate();
 	vidio::SampleFormat sample_fmt = writer.sampleformat();
 	cout << "Writer sample_rate: " << sample_rate << " sample_fmt codec: " << sample_fmt.codec << " layout: " << sample_fmt.layout << " nchannels: " << sample_fmt.nchannels << " data type: " << sample_fmt.data_type << endl;
 
 	if(writer.write_audio_samples(samplesbuf, nsamples))
 	{
-		std::cout << "wrote audio samples." << std::endl;
+		std::cout << "Wrote audio samples to " << filename << "." << std::endl;
 	}
-}
-
-// Isolate test away from Vidio::Writer class to simply Subprocess:
-bool write_audio_samples(std::unique_ptr<Subprocess>& ffmpeg_process_audio, const void* buf, const size_t& nsamples)
-{
-	size_t nchannels = 1;//sampleformat().nchannels;
-	size_t nbytes = 2;
-	size_t audio_samplebuf_size = nbytes * nsamples * nchannels;
-	const uint8_t* tmpbuf = static_cast<const uint8_t*>(buf);
-	std::size_t res;
-	for(std::size_t bytes_read = 0; bytes_read < audio_samplebuf_size; bytes_read += res)
-	{
-		std::cout << "Writing bytes." << std::endl;
-		res = ffmpeg_process_audio->write_to_stdin(reinterpret_cast<const char*>(tmpbuf + bytes_read), audio_samplebuf_size - bytes_read);
-		if(res == 0)
-			return false;
-	}
-	return true;
-}
-
-bool write_test(const std::string& filename = "output.wav")
-{
-	// first 10 samples of sine.wav
-	size_t nsamples = 10;
-	int16_t samplesbuf[nsamples] = {191,1505,3141,4600,6051,7650,9167,10526,11898,13294};
-	const char *const commandLine[] = {"/usr/bin/ffmpeg", "-hide_banner", "-y", "-i", "pipe:0", "-f", "s16le", "-c:a", "pcm_s16le", filename.c_str(), 0};
-	std::unique_ptr<Subprocess> ffmpeg_process_audio=std::make_unique<Subprocess>(commandLine, Subprocess::JOIN);
-	if(ffmpeg_process_audio == nullptr)
-	{
-		std::cout << "Could not create ffmpeg audio process!" << std::endl;
-		return false;
-	}
-	std::cout << "calling write audio samples" << std::endl;
-	bool retval = write_audio_samples(ffmpeg_process_audio, samplesbuf, nsamples);
-	return retval;
 }
 
 int main(int argc,char** argv)
 {
-	//reader_test();
-	//writer_test();
-	write_test();
+	// first 10 samples of sine.wav
+	size_t nsamples = 10;
+	int16_t samplesbuf[nsamples] = {191,1505,3141,4600,6051,7650,9167,10526,11898,13294};
+	writer_test(samplesbuf,nsamples);
+	std::unique_ptr<int16_t[]> resultbuf = reader_test(nsamples);
+	size_t ncorrect = 0;
+	for(size_t sample_ind = 0; sample_ind < nsamples; sample_ind++)
+	{
+		if(resultbuf[sample_ind] == samplesbuf[sample_ind])
+		{
+			ncorrect++;
+		}
+		else
+		{
+			std::cout << "Non-matching read from written samples.  Written value:" << samplesbuf[sample_ind] << " vs. Read value: " << resultbuf[sample_ind] << std::endl;
+		}
+	}
+	if(ncorrect == nsamples)
+	{
+		std::cout << "All audio samples written and read correctly." << std::endl;
+	}
 	return 0;
 }
