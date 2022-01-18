@@ -36,42 +36,67 @@ void manual_write_pipe()
 	}
 }
 
+void write_video_frame(std::unique_ptr<Subprocess>& ffmpeg_proc, const void* buf, const size_t correctSize)
+{
+    if( ffmpeg_proc->input )
+    {
+        const char ch = 's';
+        //const uint8_t* tmpbuf1 = static_cast<const uint8_t*>(buf);
+        //size_t writtenCount=fwrite(reinterpret_cast<const char*>(tmpbuf1), 1, correctSize, ffmpeg_proc->input); // Can't write whole frame buffer at one time (due to async Subprocess?)
+        size_t writtenCount=fwrite(&ch, 1, 1, ffmpeg_proc->input);
+        if(writtenCount==1)//correctSize)
+        {
+            std::cout << "wrote bytes successfully." << std::endl;
+            if(ferror(ffmpeg_proc->input))
+            {
+                perror("Error:");
+                std::cout << "Error with write pipe!" << std::endl;
+            }
+            fflush(ffmpeg_proc->input); // // SIGPIPE Broken!  Is the command not initializing properly?  ONLY FLUSH once per frame?
+        }
+    }
+}
+
 // Standalone write example w/Subprocess: TODO: doesn't work!
 void manual_write_subprocess()
 {
 	//std::stringstream ss;
 	//ss << "ffmpeg -hide_banner -y -f rawvideo -vcodec rawvideo -pix_fmt rgba -s 1280x720 -r 25 -i - out.mp4";
-	const char *const commandLine[] = {"ffmpeg", "-hide_banner", "-y", "-f", "rawvideo", "-vcodec", "rawvideo", "-pix_fmt", "rgba", "-s", "1280x720", "-r", "25", "-i", "-", "out.mp4", 0};
+    const char *const commandLine[] = {"ffmpeg", "-hide_banner", "-y", "-f", "rawvideo", "-vcodec", "rawvideo", "-pix_fmt", "rgba", "-s", "1280x720", "-r", "25", "-i", "-", "out.mp4", 0};
+    //const char *const commandLine[] = {"ffmpeg -hide_banner -y -f rawvideo -vcodec rawvideo -pix_fmt rgba -s 1280x720 -r 25 -i - out.mp4", 0};
     std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(commandLine, Subprocess::JOIN);
 	FILE* pipeout = ffmpeg_proc->input;//popen(ss.str().c_str(), "w");
 	size_t correctSize = 1280*720*4; //width * height * nchannels;
 	std::unique_ptr<uint8_t[]> framebuf(new uint8_t[correctSize]);
 	for(size_t i = 0; i < correctSize; i++)
 	{
-		framebuf.get()[i] = static_cast<uint8_t>(i % 256); // set to a value.
-	}
-	
-	if( pipeout )
-	{
-		size_t writtenCount=fwrite(framebuf.get(), 1, correctSize, pipeout);
-		fflush( pipeout );
-		if(writtenCount==correctSize)
-			std::cout << "wrote bytes successfully." << std::endl;
+        framebuf.get()[i] = 1; // set to a value.
 	}
 
-	if(pipeout != NULL)
-	{
-		fflush(pipeout);
-		//pclose(pipeout); // handled by Subprocess
-	}
+    //write_video_frame(ffmpeg_proc, framebuf.get(), correctSize);
+    const char ch = 's';
+    size_t writtenCount=fwrite(&ch, 1, 1, ffmpeg_proc->input);
+
+    // From subprocess.h read method:
+    //const int fd = fileno(ffmpeg_proc->input); // broken pipe!
+    //size_t writtenCount = write(fd, &ch, 1); // broken pipe!
+
+    fflush(ffmpeg_proc->input); // broken pipe!
+
+    if(pipeout != NULL)
+    {
+        fflush(pipeout);
+        //pclose(pipeout); // handled by Subprocess
+    }
+	
 }
 
 int main(int argc,char** argv)
 {
 	try
 	{
-		//manual_write_pipe();
-		manual_write_subprocess();
+        //manual_write_pipe();
+        manual_write_subprocess();
 		return 0;
 
 		vidio::Reader reader(std::string(argv[1]),"rgba");
