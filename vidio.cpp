@@ -799,7 +799,7 @@ public:
 		{
 			res = ffmpeg_process_video->write_to_stdin(reinterpret_cast<const char*>(tmpbuf + bytes_read), video_framebuf_sz - bytes_read);
 			fflush(ffmpeg_process_video->input);
-			if(res == 0)
+			if(res == 0)//if(res < (video_framebuf_sz - bytes_read))
 				return false;
 		}
 		return true;

@@ -29,7 +29,7 @@ public:
     }
 	unsigned int write_to_stdin(const char* buf,unsigned int n)
 	{
-		return (unsigned int)fwrite(buf, n,1,input);
+		return (unsigned int)fwrite(buf, 1,n,input);
 	}
     
     unsigned int read_from_stdout(char* buf,unsigned int n)
