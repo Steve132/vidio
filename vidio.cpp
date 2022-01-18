@@ -463,7 +463,7 @@ public:
     }
     bool good() const
     {
-        return ffmpeg_process != nullptr;
+        return (ffmpeg_process != nullptr) || (ffmpeg_process_audio != nullptr);
     }
 
 	bool read_audio_samples(void* buf, const size_t& nsamples) const
@@ -592,11 +592,80 @@ std::unique_ptr<Subprocess> start_ffmpeg_output_audio(const std::vector<std::str
 	return ffmpeg_proc;
 }
 
+std::unique_ptr<Subprocess> start_ffmpeg_output_video(const std::vector<std::string>& encode_ffmpeg_params, const vidio::FFMPEG_Install& install, const std::string& pixelformat, const double& fps, const vidio::Size& frame_dimensions, const std::string& filename)
+{
+	if(!install.good())
+	{
+		throw std::runtime_error("FFMPEG not found.");
+	}
+	std::vector<const char*> cmdLine;
+    cmdLine.emplace_back(install.ffmpeg_path().c_str());
+    cmdLine.emplace_back("-hide_banner");
+    cmdLine.emplace_back("-y"); // yes to overwrite output TODO: remove
+	if(!((encode_ffmpeg_params.size() == 1) && (encode_ffmpeg_params[0] == "")))
+	{
+		for(const std::string& ia : encode_ffmpeg_params)
+		{
+		    cmdLine.push_back(ia.c_str());
+		}
+	}
+	// Set codec and data type for raw output:
+	bool is_mp4 = (filename.substr(filename.find_last_of(".")) == ".mp4");
+	cmdLine.push_back("-f");
+	if(is_mp4)
+	{
+		cmdLine.push_back("mp4");
+	}
+	else
+	{
+		cmdLine.push_back("rawvideo");
+	}
+	cmdLine.push_back("-vcodec");
+	if(is_mp4)
+	{
+		cmdLine.push_back("mpeg4"); // TODO: automate, verify video format selection
+	}
+	else
+	{
+		cmdLine.push_back("rawvideo");
+	}
+	cmdLine.push_back("-pix_fmt");
+	cmdLine.push_back(pixelformat.c_str()); // TODO: verify pixelformat in writer constructor
+	cmdLine.push_back("-s");
+	std::stringstream ss;
+	ss << frame_dimensions.width;
+	cmdLine.push_back(ss.str().c_str());
+	cmdLine.push_back("x");
+	std::stringstream ss2;
+	ss2 << frame_dimensions.height;
+	cmdLine.push_back(ss2.str().c_str());
+	if(fps > 0.0)
+	{
+		cmdLine.push_back("-r");
+		std::stringstream ss3;
+		ss3 << fps;
+		cmdLine.push_back(ss3.str().c_str());
+	}
+	cmdLine.push_back("-i");
+	cmdLine.push_back("-"); // equivalent arg to "-" is "pipe:" // read from stdin, where we're writing to.
+	cmdLine.push_back(filename.c_str());
+	cmdLine.push_back(0);
+
+	std::unique_ptr<Subprocess> ffmpeg_proc=std::make_unique<Subprocess>(cmdLine.data(), Subprocess::JOIN);
+	/*if(ffmpeg_proc == nullptr)
+		throw std::runtime_exception("Couldn't open write process!");
+	if(ffmpeg_proc->input == nullptr)
+		throw std::runtime_exception("Couldn't open write process!");
+	*/
+	return ffmpeg_proc;
+}
+
+
 class Writer::Impl
 {
 public:
-    std::unique_ptr<Subprocess> ffmpeg_process_audio;
-    Impl(const std::vector<std::string>& encode_ffmpeg_args, const Size& size, double framerate, const std::string& pixelfmt="rgb24", const FFMPEG_Install& install=FFMPEG_Install(), const std::string& filename="")
+    std::unique_ptr<Subprocess> ffmpeg_process_audio, ffmpeg_process_video;
+    Impl(const std::vector<std::string>& encode_ffmpeg_args, const Size& size, double framerate, const std::string& requested_pixelfmt="rgba", const FFMPEG_Install& install=FFMPEG_Install(), const std::string& filename="")
     {
 		// Raw audio defaults:
 		SampleFormat requested_sample_fmt("pcm_s16le", "mono", 1, "s16le");
@@ -607,6 +676,39 @@ public:
 		{
 			throw std::runtime_error("FFMPEG Installation not found.");
 		}
+		std::string native_pixelformat = "";
+        std::string actual_pixelformat = requested_pixelfmt;
+        
+        const std::unordered_map<std::string,vidio::FFMPEG_Install::PixFormat>& pixformats = install.pixformats();
+		if(requested_pixelfmt == "")
+        {
+            actual_pixelformat=native_pixelformat;
+        }
+		auto rnative=pixformats.find(native_pixelformat);
+        native_fmt={"0",0,0};
+        if(rnative == pixformats.end())
+        {
+            if(actual_pixelformat == native_pixelformat) {
+                throw std::runtime_error(std::string("Could not find metatdata for raw input pixelformat '")+actual_pixelformat+"'");
+            }
+        }
+        else
+        {
+            native_fmt=rnative->second;
+        }
+        
+        if(actual_pixelformat==native_pixelformat)
+        {
+            fmt=native_fmt;
+        }
+        else
+        {
+            auto rout=pixformats.find(actual_pixelformat);
+            if(rout == pixformats.end()){
+                throw std::runtime_error(std::string("Pixelformat is not a valid read pixelformat for this ffmpeg '")+actual_pixelformat+"'");
+            }
+            fmt=rout->second;
+        }
 
 		try
 		{
@@ -620,11 +722,22 @@ public:
 					throw std::runtime_error("Error starting audio writer.");
 				}
 			}
+			else
+			{
+				ffmpeg_process_video = start_ffmpeg_output_video(encode_ffmpeg_args, install, fmt.name, framerate, size, filename);
+				if(ffmpeg_process_video == nullptr)
+				{
+					throw std::runtime_error("Error starting video writer.");
+				}
+			}
         } 
         catch(const std::exception& e)
         {
 			throw std::runtime_error((std::string("Could not open for writing."))+e.what());
 		}
+		frame_dims.width = size.width;
+		frame_dims.height = size.height;
+		fps = framerate;
     }
 	~Impl()
 	{
@@ -632,8 +745,22 @@ public:
 		{
 			fflush(ffmpeg_process_audio->input);
 		}
+		if((ffmpeg_process_video != nullptr) && (ffmpeg_process_video->input != nullptr))
+		{
+			fflush(ffmpeg_process_video->input);
+		}
 	}
 
+	PixelFormat fmt;
+    const PixelFormat& pixelformat() const
+    {
+        return fmt;
+    }
+    PixelFormat native_fmt;
+    const PixelFormat& native_pixelformat() const
+    {
+        return native_fmt;
+    }
     SampleFormat sample_fmt;
     const SampleFormat& sampleformat() const
     {
@@ -644,9 +771,42 @@ public:
 	{
 		return sample_rate;
 	}
+    double fps;
+	double framerate() const
+	{
+        return fps;
+    }
+
+    Size frame_dims;
+	Size video_frame_dimensions() const
+	{
+        return frame_dims;
+    }
+    
+    size_t  video_frame_bufsize () const {
+		Size sz=video_frame_dimensions();
+		return (sz.width*sz.height*static_cast<size_t>(pixelformat().bits_per_pixel))/8;
+	}
+
+	bool write_video_frame(const void* buf) const
+	{
+		unsigned int video_framebuf_sz = video_frame_bufsize();
+		std::cout<< "Video framebuf size for write:" << video_framebuf_sz << std::endl;
+
+		const uint8_t* tmpbuf = static_cast<const uint8_t*>(buf);
+		std::size_t res;
+		for(std::size_t bytes_read = 0; bytes_read < video_framebuf_sz; bytes_read += res)
+		{
+			res = ffmpeg_process_video->write_to_stdin(reinterpret_cast<const char*>(tmpbuf + bytes_read), video_framebuf_sz - bytes_read);
+			fflush(ffmpeg_process_video->input);
+			if(res == 0)
+				return false;
+		}
+		return true;
+    }
     bool good() const
     {
-        return ffmpeg_process_audio != nullptr;
+        return (ffmpeg_process_audio != nullptr) || (ffmpeg_process_video != nullptr);
     }
 
 	bool write_audio_samples(const void* buf, const size_t& nsamples) const
@@ -669,25 +829,47 @@ public:
 Writer::Writer(const std::string& filename,
 		const Size& size,
 		double framerate,
-		const std::string& pixelfmt,
+		const std::string& requested_pixelfmt,
 		const std::string& encode_ffmpeg_params,
 		const FFMPEG_Install& install):
-	impl(std::make_shared<Writer::Impl>(std::vector<std::string>{encode_ffmpeg_params},size,framerate,pixelfmt,install,filename))
+	impl(std::make_shared<Writer::Impl>(std::vector<std::string>{encode_ffmpeg_params},size,framerate,requested_pixelfmt,install,filename))
 {
 }
 
 Writer::~Writer()
 {}
 
+const PixelFormat& Writer::pixelformat() const
+{
+    return impl->pixelformat();
+}
+const PixelFormat& Writer::native_pixelformat() const
+{
+    return impl->pixelformat();
+}
 const SampleFormat& Writer::sampleformat() const
 {
     return impl->sampleformat();
+}
+double Writer::framerate() const
+{
+    return impl->framerate();
 }
 unsigned int Writer::samplerate() const
 {
     return impl->samplerate();
 }
-
+Size Writer::video_frame_dimensions() const
+{
+    return impl->video_frame_dimensions();
+}
+size_t Writer::video_frame_bufsize () const {
+    return impl->video_frame_bufsize();
+}
+bool Writer::write_video_frame(const void *buf) const
+{
+    return impl->write_video_frame(buf);
+}
 bool Writer::write_audio_samples(const void* buf, const size_t& nsamples) const
 {
 	return impl->write_audio_samples(buf, nsamples);
